@@ -79,7 +79,6 @@ This script:
 
 - Loads `ppg_calibration_data.csv`
 - Filters out invalid readings
-- Computes AC, DC, and R-ratio features
 - Trains several regression models (Polynomial, Random Forest, Gradient Boosting)
 - Picks best-performing model for HR and SpO2
 - Saves trained models to:

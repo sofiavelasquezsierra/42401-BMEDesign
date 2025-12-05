@@ -16,7 +16,7 @@ BAUD_RATE = 115200
 OUTPUT_FILE = "ppg_calibration_data.csv"
 
 # Number of calibration repetitions and duration per set
-CALIBRATION_SETS = 5
+CALIBRATION_SETS = 170
 SECONDS_PER_SET = 2
 
 # Ask user to input HR and SpO₂ from clinical pulse oximeter
