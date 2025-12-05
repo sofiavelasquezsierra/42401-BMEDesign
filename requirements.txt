@@ -2,7 +2,10 @@ pandas
 numpy
 matplotlib
 scikit-learn
+scipy
 tensorflow
 keras
 biosppy
 neurokit2
+pyserial
+joblib
