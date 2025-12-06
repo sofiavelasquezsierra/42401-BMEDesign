@@ -68,7 +68,6 @@ You can modify these values in `hr_spo2_data_collect.py`:
     SECONDS_PER_SET = 2
 
 ---
-https://www.mdpi.com/1424-8220/19/8/1874 
 
 ## 3. Generate Calibration Curves
 
@@ -98,3 +97,5 @@ This script reads raw values from sensor and prints:
     SpO2 = xx.x %
 
 Optionally logs live predictions to CSV.
+
+https://www.mdpi.com/1424-8220/19/8/1874 
