@@ -16,7 +16,7 @@ Upload file to MCU:
 
 The firmware outputs raw MAX30102 readings in format:
 
-    IR=53422,RED=19100,IR_AC=220,IR_DC=54000,RED_AC=85,RED_DC=19500,R=0.562341,T=123456
+    IR=53422,RED=19100,T=123456
 
 ---
 
@@ -26,13 +26,13 @@ Put fingertip oximeter on and tape MAX30102 to another finger on the same hand.
 
 Start calibration with:
 ```
-python calibration.py
+python hr_spo2_data_collect.py
 ```
 This script:
 
 - Asks for true HR and SpO2 values from fingertip pulse oximeter
 - Records raw PPG values for a fixed number of seconds per calibration set
-- Saves all collected data into `ppg_calibration_data.csv`
+- Saves all collected data into `hr_spo2_calibration_data.csv`
 
 ### Recommended Calibration Procedure
 
@@ -62,28 +62,27 @@ Deep breathing | HR variability | 15
 
 Suggested total calibration sets: 170
 
-You can modify these values in `calibration.py`:
+You can modify these values in `hr_spo2_data_collect.py`:
 
     CALIBRATION_SETS = 170
     SECONDS_PER_SET = 2
 
 ---
+https://www.mdpi.com/1424-8220/19/8/1874 
 
-## 3. Train ML Models
+## 3. Generate Calibration Curves
 
 Once calibration data is collected, run:
 ```
-python calibration_train.py
+python hr_spo2_calibration.ipynb
 ```
 This script:
 
 - Loads `ppg_calibration_data.csv`
-- Filters out invalid readings
-- Trains several regression models (Polynomial, Random Forest, Gradient Boosting)
-- Picks best-performing model for HR and SpO2
-- Saves trained models to:
-    hr_model.pkl
-    spo2_model.pkl
+- Band-pass filter raw signals
+- Extract AC, DC, and R-ratio features
+- HR calibration
+- SpO2 Calibration
 
 ---
 
