@@ -26,15 +26,18 @@ void setup() {
 }
 
 void loop() {
-  if (sensor.check() > 0) {
-    uint32_t ir_raw  = sensor.getFIFOIR();
-    uint32_t red_raw = sensor.getFIFORed();
+    int n = sensor.check();
 
-    Serial.print("IR=");
-    Serial.print(ir_raw);
-    Serial.print(",RED=");
-    Serial.print(red_raw);
-    Serial.print(",T=");
-    Serial.println(millis());
-  }
+    while (n--) {
+      uint32_t ir_raw  = sensor.getFIFOIR();
+      uint32_t red_raw = sensor.getFIFORed();
+      uint32_t t = micros();
+
+      Serial.print("IR=");
+      Serial.print(ir_raw);
+      Serial.print(",RED=");
+      Serial.print(red_raw);
+      Serial.print(",T=");
+      Serial.println(t);
+    }
 }
