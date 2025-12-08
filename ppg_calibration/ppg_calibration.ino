@@ -2,6 +2,9 @@
 #include <MAX30105.h>
 
 MAX30105 sensor;
+uint32_t last_ts = 0;
+const uint32_t dt = 10000; // matches the sensor sampling frequency
+uint32_t counter = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -28,16 +31,31 @@ void setup() {
 void loop() {
     int n = sensor.check();
 
+    if(n == 0) { // no samples to log
+      last_ts = micros();
+      counter = 0;
+      return;
+    }
+
+    if(counter == 0) {
+      last_ts = micros(); // realign timestamps to start of data burst
+    }
+
     while (n--) {
       uint32_t ir_raw  = sensor.getFIFOIR();
       uint32_t red_raw = sensor.getFIFORed();
-      uint32_t t = micros();
+
+      if(counter > 0) {
+        last_ts += dt; // fixed sampling interval to correct timestamps
+      }
 
       Serial.print("IR=");
       Serial.print(ir_raw);
       Serial.print(",RED=");
       Serial.print(red_raw);
       Serial.print(",T=");
-      Serial.println(t);
+      Serial.println(last_ts);
+
+      counter = counter + 1;
     }
 }
