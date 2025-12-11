@@ -6,11 +6,11 @@ import csv
 import time
 from datetime import datetime
 
-SERIAL_PORT = "COM5"
+SERIAL_PORT = "COM7"
 BAUD_RATE = 115200
 OUTPUT_FILE = "hr_spo2_calibration_data.csv"
 
-CALIBRATION_SETS = 170
+CALIBRATION_SETS = 45
 WINDOW_SECONDS = 2
 
 def get_clinical_values():
@@ -40,7 +40,7 @@ def main():
 
     with open(OUTPUT_FILE, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["timestamp", "window", "sample", "ir_raw", "red_raw", "true_hr", "true_spo2"])
+        writer.writerow(["mcu_time", "window", "sample", "ir_raw", "red_raw", "true_hr", "true_spo2"])
 
         for window in range(CALIBRATION_SETS):
             print(f"\nCalibration window {window+1}/{CALIBRATION_SETS}")
@@ -63,12 +63,13 @@ def main():
 
                 writer.writerow([
                     datetime.now().isoformat(),
+                    parsed["T"],
                     window,
                     sample_index,
                     parsed["IR"],
                     parsed["RED"],
                     true_hr,
-                    true_spo2
+                    true_spo2,
                 ])
 
                 sample_index += 1
