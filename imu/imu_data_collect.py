@@ -97,21 +97,7 @@ async def collect(label, mode):
 
                 print("Fall event recorded.\n")
 
-
 async def main():
-    # print("Scanning for XIAO-IMU…")
-    # device = await BleakScanner.find_device_by_name("XIAO-IMU")
-    # print("Found:", device.address)
-
-    # async with BleakClient(device) as client:
-    #     print("Connected.")
-    #     services = await client.get_services()
-        
-    #     for service in services:
-    #         print("SERVICE:", service.uuid)
-    #         for char in service.characteristics:
-    #             print("   CHAR:", char.uuid, char.properties)
-
     print("Available labels:")
     for i, lbl in enumerate(LABELS):
         print(f"  {i}: {lbl}")
@@ -121,6 +107,5 @@ async def main():
     mode = "continuous" if label in CONTINUOUS_LABELS else "event"
 
     await collect(label, mode)
-
 
 asyncio.run(main())
