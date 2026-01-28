@@ -2,8 +2,14 @@
 #include "Wire.h"
 #include <bluefruit.h>
 
+
 // constants
-#define BUF_SIZE 10
+const float G = 9.81;
+
+// macros
+#define BUF_SIZE 250
+#define IDLE_TRIGGER 0.8*G
+#define CHECK_TRIGGER 1.4*G;
 
 // BLE UART service
 BLEUart bleuart;
@@ -47,11 +53,16 @@ enum MOTION_STATES {
 enum FALL_STATES {
     IDLE_FALL = 0,
     CHECK_FALL = 1,
-    IMMOBILE_FALL_FORWARD = 2,
-    IMMOBILE_FALL_BACKWARD = 3,
-    IMMOBILE_FALL_LEFT = 4,
-    IMMOBILE_FALL_RIGHT = 5,
+    STABILIZE_ACCEL_FALL = 2,
+    STABILIZE_GYRO_FALL = 3,
+    POSTURE_CHECK_FALL = 4,
+    DETECTED_FALL = 5,
 } fall_state;
+
+emum IMU_COMP {
+    ACCEL = 0,
+    GYRO = 1
+} imu_comp;
 
 // enum LOCOMOTION_STATES {
 //     STANDING = 0,
@@ -60,7 +71,7 @@ enum FALL_STATES {
 // } locomotion_state;
 
 void initialize_values() {
-    state = IDLE;
+    fall_state = IDLE_FALL;
     A_SVM = 0.0;
     G_SVM = 0.0;
     update_pos = 0;
@@ -77,9 +88,11 @@ void update_values() {
     float gy = myIMU.readFloatGyroY() - cal_gy;
     float gz = myIMU.readFloatGyroZ() - cal_gz;
 
+    // update SVMs
     A_SVM = sqrt(sq(ax) + sq(ay) + sq(az));
     G_SVM = sqrt(sq(gx) + sq(gy) + sq(gz));
 
+    // update buffers with new value
     ax_buf[update_pos] = ax;
     ay_buf[update_pos] = ay;
     az_buf[update_pos] = az;
@@ -88,14 +101,17 @@ void update_values() {
     gy_buf[update_pos] = gy;
     gz_buf[update_pos] = gz;
 
+    // increment position pointer
     update_pos = update_pos + 1;
 
+    // update if the data is valid or not
     if(!avg_valid & (update_pos >= BUF_SIZE)) {
         avg_valid = true;
     }
     
 }
 
+// send all IMU data points over BLEs
 void send_values() {
     float ax = myIMU.readFloatAccelX() - cal_ax;
     float ay = myIMU.readFloatAccelY() - cal_ay;
@@ -120,6 +136,20 @@ void send_values() {
     bleuart.print(buffer);
 }
 
+// returns if there was a high acceleration event, also collect the BUF_SIZE
+// samples for later processing
+bool check_fall() {
+    bool large_accel = false;
+    for(int i = 0; i < BUF_SIZE; i++) {
+        update_values();
+        if(A_SVM >= CHECK_TRIGGER) {
+            large_accel = true;
+        }
+    }
+
+    return large_accel;
+}
+
 void setup() {
     Serial.begin(115200);
     while (!Serial);
@@ -142,9 +172,57 @@ void setup() {
     initialize_values();
 }
 
+// FSM style motion detection
 void loop() {
 
-    send_values();
+    while(fall_state == IDLE_FALL) {
+        update_values();
+        if(A_SVM >= IDLE_TRIGGER) {
+            fall_state = CHECK_FALL;
+        }
+    }
 
-    delay(250);
+    if(fall_state == CHECK_FALL) {
+        if(check_fall()) {
+            fall_state = STABILIZE_ACCEL_FALL;
+        }
+        else {
+            fall_state = IDLE_FALL;
+        }
+    }
+
+    if(fall_state == STABILIZE_ACCEL_FALL) {
+        if(std_dev_check(ACCEL, ACCEL_DEV_THRESHOLD)) {
+            fall_state = STABILIZE_GYRO_FALL;
+        }
+
+        else {
+            fall_state = IDLE_FALL;
+        }
+    }
+
+    if(fall_state == STABILIZE_GYRO_FALL) {
+        if(std_dev_check(GYRO, GYRO_DEV_THRESHOLD)) {
+            fall_state = POSTURE_CHECK_FALL;
+        }
+
+        else {
+            fall_state = IDLE_FALL;
+        }
+    }
+
+    if(fall_state == POSTURE_CHECK_FALL) {
+        if(posture_checK()) {
+            fall_state = DETECTED_FALL;
+        }
+        else {
+            fall_state = IDLE_FALL;
+        }
+    }
+
+    if(fall_state == DETECTED_FALL) {
+        send_values();
+    }
+
+    delay(50);
 }
