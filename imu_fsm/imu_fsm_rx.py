@@ -21,7 +21,7 @@ async def collect(label, mode):
     async with BleakClient(device) as client:
         print("Connected.")
 
-        buffer = {"AX":0, "AY":0, "AZ":0, "GX":0, "GY":0, "GZ":0}
+        buffer = {"AX":0, "AY":0, "AZ":0, "GX":0, "GY":0, "GZ":0, "ASVM":0, "GSVM":0}
         recv_buffer = ""
 
         def handle(sender, data):
@@ -35,23 +35,25 @@ async def collect(label, mode):
                 parts = [p for p in recv_buffer.strip().split(",") if p != ""]
 
                 # Not enough numbers yet → wait for more BLE fragments
-                if len(parts) < 6:
+                if len(parts) < 8:
                     break
 
-                # We have AT LEAST 6 floats → parse first 6
+                # We have AT LEAST 8 floats → parse first 8
                 try:
-                    ax, ay, az, gx, gy, gz = map(float, parts[:6])
+                    ax, ay, az, gx, gy, gz, asvm, gsvm = map(float, parts[:8])
                     buffer["AX"] = ax
                     buffer["AY"] = ay
                     buffer["AZ"] = az
                     buffer["GX"] = gx
                     buffer["GY"] = gy
                     buffer["GZ"] = gz
+                    buffer["ASVM"] = asvm
+                    buffer["GSVM"] = gsvm
                 except Exception as e:
                     print("Parse error:", e)
 
-                # Remove first 6 values from the buffer and keep the rest
-                remaining = parts[6:]
+                # Remove first 8 values from the buffer and keep the rest
+                remaining = parts[8:]
                 recv_buffer = ",".join(remaining)
                 break
 
@@ -61,7 +63,7 @@ async def collect(label, mode):
         with open(OUTPUT_FILE, "a", newline="") as f:
             writer = csv.writer(f)
             if f.tell() == 0:
-                writer.writerow(["timestamp","AX","AY","AZ","GX","GY","GZ","label"])
+                writer.writerow(["timestamp","AX","AY","AZ","GX","GY","GZ","ASVM","GSVM","label"])
 
             if mode == "continuous":
                 input("Move into position + press ENTER to start…\n")
@@ -72,6 +74,7 @@ async def collect(label, mode):
                             datetime.now().isoformat(),
                             buffer["AX"], buffer["AY"], buffer["AZ"],
                             buffer["GX"], buffer["GY"], buffer["GZ"],
+                            buffer["ASVM"], buffer["GSVM"],
                             label
                         ]
                         writer.writerow(row)
@@ -90,6 +93,7 @@ async def collect(label, mode):
                         datetime.now().isoformat(),
                         buffer["AX"], buffer["AY"], buffer["AZ"],
                         buffer["GX"], buffer["GY"], buffer["GZ"],
+                        buffer["ASVM"], buffer["GSVM"],
                         label
                     ]
                     writer.writerow(row)
