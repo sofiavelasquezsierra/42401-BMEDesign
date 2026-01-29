@@ -6,9 +6,9 @@ from bleak import BleakClient, BleakScanner
 UART_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 RX_UUID   = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
-OUTPUT_FILE = "imu_labeled_data.csv"
+OUTPUT_FILE = "willa_lying_to_standing.csv"
 
-CONTINUOUS_LABELS = ["idle", "walk", "run", "jump", "lying", "sitting", "standing"]
+CONTINUOUS_LABELS = ["idle", "walk", "run", "jump", "lying", "sitting", "falling"]
 EVENT_LABELS = ["fall"]
 LABELS = CONTINUOUS_LABELS + EVENT_LABELS
 WINDOW_DURATION = 5.0

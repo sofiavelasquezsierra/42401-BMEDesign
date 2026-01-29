@@ -70,7 +70,7 @@ enum FALL_STATES {
     DETECTED_FALL = 5,
 } fall_state;
 
-emum IMU_COMP {
+enum IMU_COMP {
     ACCEL = 0,
     GYRO = 1
 } imu_comp;
@@ -156,7 +156,7 @@ void send_values() {
     snprintf(buffer, sizeof(buffer),
             ",%.3f,%.3f,%.3f",
             gx, gy, gz);
-    Serial.println(buffer);
+    Serial.print(buffer);
     bleuart.print(buffer);
     delay(50);
 
@@ -187,10 +187,16 @@ bool check_fall() {
 bool std_dev_check(IMU_COMP dev_type, float threshold) {
     float sum = 0.0;
     float std = 0.0;
-    float[BUF_SIZE] buffer = (dev_type == ACCEL) ? (asvm_buffer) : (gsvm_buffer);
     // naive implementation, optimize if lag is too bad
-    for(int i = 0; i < BUF_SIZE; i++) {
-        sum = ((sum + buffer[i])*(sum + buffer[i]))/(BUF_SIZE);
+    if(dev_type == ACCEL) {
+        for(int i = 0; i < BUF_SIZE; i++) {
+        sum = ((sum + asvm_buf[i])*(sum + asvm_buf[i]))/(BUF_SIZE);
+        }
+    }
+    else {
+        for(int i = 0; i < BUF_SIZE; i++) {
+        sum = ((sum + gsvm_buf[i])*(sum + gsvm_buf[i]))/(BUF_SIZE);
+        }
     }
 
     std = sqrt(sum);
@@ -200,7 +206,7 @@ bool std_dev_check(IMU_COMP dev_type, float threshold) {
 }
 
 bool posture_check() {
-    return;
+    return true;
 }
 
 void setup() {
@@ -280,5 +286,5 @@ void loop() {
     //     send_values();
     // }
 
-    delay(50);
+    delay(100);
 }
