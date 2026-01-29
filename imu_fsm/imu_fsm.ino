@@ -7,9 +7,15 @@
 const float G = 9.81;
 
 // macros
+// These values are inspired by the paper
 #define BUF_SIZE 250
 #define IDLE_TRIGGER 0.8*G
-#define CHECK_TRIGGER 1.4*G;
+#define CHECK_TRIGGER 1.4*G
+
+// TODO: These values are most definitely incorrect, update
+#define ACCEL_DEV_THRESHOLD 0.2
+#define GYRO_DEV_THRESHOLD 0.2
+#define TILT_THRESHOLD 0.3
 
 // BLE UART service
 BLEUart bleuart;
@@ -34,11 +40,16 @@ float ax_buf[BUF_SIZE];
 float ay_buf[BUF_SIZE];
 float az_buf[BUF_SIZE];
 
+float asvm_buf[BUF_SIZE];
+float gsvm_buf[BUF_SIZE];
+
 int update_pos;
 bool avg_valid;
 
 float A_SVM; // accelerometer signal vector magnitude
+float A_SVM_mean;
 float G_SVM;
+float G_SVM_mean;
 
 // motion classifer states 
 enum MOTION_STATES {
@@ -101,8 +112,16 @@ void update_values() {
     gy_buf[update_pos] = gy;
     gz_buf[update_pos] = gz;
 
+    // might not need
+    asvm_buf[update_pos] = A_SVM;
+    gsvm_buf[update_pos] = G_SVM;
+
     // increment position pointer
-    update_pos = update_pos + 1;
+    update_pos = (update_pos + 1) % BUF_SIZE;
+
+    // update means
+    A_SVM_mean = (A_SVM_mean*(update_pos - 1))/(update_pos) + (A_SVM)/(update_pos);
+    G_SVM_mean = (G_SVM_mean*(update_pos - 1))/(update_pos) + (G_SVM)/(update_pos);
 
     // update if the data is valid or not
     if(!avg_valid & (update_pos >= BUF_SIZE)) {
@@ -140,15 +159,33 @@ void send_values() {
 // samples for later processing
 bool check_fall() {
     bool large_accel = false;
+    // reset update position
+    update_pos = 0;
     for(int i = 0; i < BUF_SIZE; i++) {
         update_values();
         if(A_SVM >= CHECK_TRIGGER) {
             large_accel = true;
         }
     }
-
     return large_accel;
 }
+
+bool std_dev_check(IMU_COMP dev_type, float threshold) {
+    float sum = 0.0;
+    float std = 0.0;
+    float[BUF_SIZE] buffer = (dev_type == ACCEL) ? (asvm_buffer) : (gsvm_buffer);
+    // naive implementation, optimize if lag is too bad
+    for(int i = 0; i < BUF_SIZE; i++) {
+        sum = ((sum + buffer[i])*(sum + buffer[i]))/(BUF_SIZE);
+    }
+
+    std = sqrt(sum);
+
+    return (std >= threshold);
+    
+}
+
+bool posture_check()
 
 void setup() {
     Serial.begin(115200);
@@ -177,6 +214,8 @@ void loop() {
 
     while(fall_state == IDLE_FALL) {
         update_values();
+        // right now this is just a instantaneous check but really should 
+        // be some small running average
         if(A_SVM >= IDLE_TRIGGER) {
             fall_state = CHECK_FALL;
         }
@@ -212,7 +251,7 @@ void loop() {
     }
 
     if(fall_state == POSTURE_CHECK_FALL) {
-        if(posture_checK()) {
+        if(posture_check(TILT_TRIGGER)) {
             fall_state = DETECTED_FALL;
         }
         else {
