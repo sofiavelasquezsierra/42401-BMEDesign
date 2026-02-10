@@ -16,6 +16,11 @@ const float G = 9.81;
 #define ACCEL_DEV_THRESHOLD 0.2
 #define GYRO_DEV_THRESHOLD 0.2
 #define TILT_THRESHOLD 0.3
+#define INIT_TILT_SIZE 20
+#define FINAL_TILT_SIZE 100
+#define STATIONARY_THRESHOLD 0.23
+
+#define RAD_TO_DEG 57.295779
 
 // BLE UART service
 BLEUart bleuart;
@@ -205,8 +210,22 @@ bool std_dev_check(IMU_COMP dev_type, float threshold) {
     
 }
 
+// really just a angle difference check
 bool posture_check() {
-    return true;
+    float tilt_diff = 0.0;
+    float tilt_init_sum = 0.0;
+    float tilt_final_sum = 0.0;
+
+    // extremely naive implementation, optimize later
+    for(int i = 0; i < INIT_TILT_SIZE; i++) {
+        tilt_init_sum += atan2(ay_buf[i], az_buf[i]) * RAD_TO_DEG;
+    }
+    for(int i = BUF_SIZE - FINAL_TILT_SIZE; i < BUF_SIZE; i++) {
+        tilt_final_sum += atan2(ay_buf[i], az_buf[i]) * RAD_TO_DEG;
+    }
+
+    tilt_diff = abs((tilt_final_sum/FINAL_TILT_SIZE) - (tilt_init_sum/INIT_TILT_SIZE));
+    return (tilt_diff >= TILT_THRESHOLD);
 }
 
 void setup() {
@@ -233,58 +252,58 @@ void setup() {
 
 // FSM style motion detection
 void loop() {
-    send_values();
+    // send_values();
 
-    // while(fall_state == IDLE_FALL) {
-    //     update_values();
-    //     // right now this is just a instantaneous check but really should 
-    //     // be some small running average
-    //     if(A_SVM >= IDLE_TRIGGER) {
-    //         fall_state = CHECK_FALL;
-    //     }
-    // }
+    while(fall_state == IDLE_FALL) {
+        update_values();
+        // right now this is just a instantaneous check but really should 
+        // be some small running average
+        if(A_SVM >= IDLE_TRIGGER) {
+            fall_state = CHECK_FALL;
+        }
+    }
 
-    // if(fall_state == CHECK_FALL) {
-    //     if(check_fall()) {
-    //         fall_state = STABILIZE_ACCEL_FALL;
-    //     }
-    //     else {
-    //         fall_state = IDLE_FALL;
-    //     }
-    // }
+    if(fall_state == CHECK_FALL) {
+        if(check_fall()) {
+            fall_state = STABILIZE_ACCEL_FALL;
+        }
+        else {
+            fall_state = IDLE_FALL;
+        }
+    }
 
-    // if(fall_state == STABILIZE_ACCEL_FALL) {
-    //     if(std_dev_check(ACCEL, ACCEL_DEV_THRESHOLD)) {
-    //         fall_state = STABILIZE_GYRO_FALL;
-    //     }
+    if(fall_state == STABILIZE_ACCEL_FALL) {
+        if(std_dev_check(ACCEL, ACCEL_DEV_THRESHOLD)) {
+            fall_state = STABILIZE_GYRO_FALL;
+        }
 
-    //     else {
-    //         fall_state = IDLE_FALL;
-    //     }
-    // }
+        else {
+            fall_state = IDLE_FALL;
+        }
+    }
 
-    // if(fall_state == STABILIZE_GYRO_FALL) {
-    //     if(std_dev_check(GYRO, GYRO_DEV_THRESHOLD)) {
-    //         fall_state = POSTURE_CHECK_FALL;
-    //     }
+    if(fall_state == STABILIZE_GYRO_FALL) {
+        if(std_dev_check(GYRO, GYRO_DEV_THRESHOLD)) {
+            fall_state = POSTURE_CHECK_FALL;
+        }
 
-    //     else {
-    //         fall_state = IDLE_FALL;
-    //     }
-    // }
+        else {
+            fall_state = IDLE_FALL;
+        }
+    }
 
-    // if(fall_state == POSTURE_CHECK_FALL) {
-    //     if(posture_check(TILT_TRIGGER)) {
-    //         fall_state = DETECTED_FALL;
-    //     }
-    //     else {
-    //         fall_state = IDLE_FALL;
-    //     }
-    // }
+    if(fall_state == POSTURE_CHECK_FALL) {
+        if(posture_check(TILT_TRIGGER)) {
+            fall_state = DETECTED_FALL;
+        }
+        else {
+            fall_state = IDLE_FALL;
+        }
+    }
 
-    // if(fall_state == DETECTED_FALL) {
-    //     send_values();
-    // }
+    if(fall_state == DETECTED_FALL) {
+        send_values();
+    }
 
     delay(100);
 }
