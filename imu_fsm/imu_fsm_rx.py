@@ -6,9 +6,9 @@ from bleak import BleakClient, BleakScanner
 UART_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 RX_UUID   = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
-OUTPUT_FILE = "willa_lying_to_standing.csv"
+OUTPUT_FILE = "misc.csv"
 
-CONTINUOUS_LABELS = ["idle", "walk", "run", "jump", "lying", "sitting", "falling"]
+CONTINUOUS_LABELS = ["idle", "walk", "run", "jump", "lying", "sitting", "falling", "misc"]
 EVENT_LABELS = ["fall"]
 LABELS = CONTINUOUS_LABELS + EVENT_LABELS
 WINDOW_DURATION = 5.0
@@ -21,7 +21,7 @@ async def collect(label, mode):
     async with BleakClient(device) as client:
         print("Connected.")
 
-        buffer = {"AX":0, "AY":0, "AZ":0, "GX":0, "GY":0, "GZ":0, "ASVM":0, "GSVM":0, "FALL_EVENT":0}
+        buffer = {"mcu_time": 0, "FALL_EVENT":0, "AX":0, "AY":0, "AZ":0, "GX":0, "GY":0, "GZ":0, "ASVM":0, "GSVM":0}
         recv_buffer = ""
 
         def handle(sender, data):
@@ -30,29 +30,54 @@ async def collect(label, mode):
             text = data.decode(errors="ignore")
             recv_buffer += text
 
-            # Try parsing as long as at least some commas are present
             while True:
-                parts = [p for p in recv_buffer.strip().split(",") if p != ""]
+                parts = recv_buffer.split(",")
 
-                # Not enough numbers yet → wait for more BLE fragments
-                if len(parts) < 9:
+                # need 10 full fields
+                if len(parts) < 11:   # 10 values + trailing remainder
                     break
+
+                fields = parts[:10]
+                recv_buffer = ",".join(parts[10:])  # keep exact remainder
+
                 try:
-                    ax, ay, az, gx, gy, gz, asvm, gsvm, fall_event = map(float, parts[:9])
-                    buffer["AX"] = ax
-                    buffer["AY"] = ay
-                    buffer["AZ"] = az
-                    buffer["GX"] = gx
-                    buffer["GY"] = gy
-                    buffer["GZ"] = gz
-                    buffer["ASVM"] = asvm
-                    buffer["GSVM"] = gsvm
-                    buffer["FALL_EVENT"] = fall_event
+                    buffer["mcu_time"] = int(float(fields[0]))
+                    buffer["FALL_EVENT"] = int(float(fields[1]))
+                    buffer["AX"] = float(fields[2])
+                    buffer["AY"] = float(fields[3])
+                    buffer["AZ"] = float(fields[4])
+                    buffer["GX"] = float(fields[5])
+                    buffer["GY"] = float(fields[6])
+                    buffer["GZ"] = float(fields[7])
+                    buffer["ASVM"] = float(fields[8])
+                    buffer["GSVM"] = float(fields[9])
                 except Exception as e:
-                    print("Parse error:", e)
+                    print("Parse error:", e, fields)
+            
+            # # Try parsing as long as at least some commas are present
+            # while True:
+            #     parts = [p for p in recv_buffer.strip().split(",") if p != ""]
+
+            #     # Not enough numbers yet → wait for more BLE fragments
+            #     if len(parts) < 10:
+            #         break
+            #     try:
+            #         mcu_time, fall_event, ax, ay, az, gx, gy, gz, asvm, gsvm = map(float, parts[:10])
+            #         buffer["mcu_time"] = mcu_time
+            #         buffer["FALL_EVENT"] = fall_event
+            #         buffer["AX"] = ax
+            #         buffer["AY"] = ay
+            #         buffer["AZ"] = az
+            #         buffer["GX"] = gx
+            #         buffer["GY"] = gy
+            #         buffer["GZ"] = gz
+            #         buffer["ASVM"] = asvm
+            #         buffer["GSVM"] = gsvm
+            #     except Exception as e:
+            #         print("Parse error:", e)
 
                 # Remove first 9 values from the buffer and keep the rest
-                remaining = parts[9:]
+                remaining = parts[10:]
                 recv_buffer = ",".join(remaining)
                 break
 
@@ -62,7 +87,7 @@ async def collect(label, mode):
         with open(OUTPUT_FILE, "a", newline="") as f:
             writer = csv.writer(f)
             if f.tell() == 0:
-                writer.writerow(["timestamp","AX","AY","AZ","GX","GY","GZ","ASVM","GSVM", "FALL_EVENT","label"])
+                writer.writerow(["mcu_time", "FALL_EVENT", "AX","AY","AZ","GX","GY","GZ","ASVM","GSVM","label"])
 
             if mode == "continuous":
                 input("Move into position + press ENTER to start…\n")
@@ -70,10 +95,12 @@ async def collect(label, mode):
                 try:
                     while True:
                         row = [
-                            datetime.now().isoformat(),
+                            # datetime.now().isoformat(),
+                            buffer["mcu_time"],
+                            buffer["FALL_EVENT"],
                             buffer["AX"], buffer["AY"], buffer["AZ"],
                             buffer["GX"], buffer["GY"], buffer["GZ"],
-                            buffer["ASVM"], buffer["GSVM"], buffer["FALL_EVENT"],
+                            buffer["ASVM"], buffer["GSVM"],
                             label
                         ]
                         writer.writerow(row)
@@ -89,10 +116,11 @@ async def collect(label, mode):
                 start = datetime.now().timestamp()
                 while datetime.now().timestamp() - start < WINDOW_DURATION:
                     row = [
-                        datetime.now().isoformat(),
+                        buffer["mcu_time"],
+                        buffer["FALL_EVENT"],
                         buffer["AX"], buffer["AY"], buffer["AZ"],
                         buffer["GX"], buffer["GY"], buffer["GZ"],
-                        buffer["ASVM"], buffer["GSVM"], buffer["FALL_EVENT"],
+                        buffer["ASVM"], buffer["GSVM"],
                         label
                     ]
                     writer.writerow(row)

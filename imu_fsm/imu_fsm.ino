@@ -8,8 +8,10 @@ const float G = 9.81;
 const float RAD_TO_DEG_CONV = 57.295779;
 
 // macros
+
+#define LOOP_DELAY 100
 // These values are inspired by the paper
-#define BUF_SIZE 250
+#define BUF_SIZE 200
 #define IDLE_TRIGGER 0.8*G
 #define CHECK_TRIGGER 1.0*G
 
@@ -17,8 +19,8 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define ACCEL_DEV_THRESHOLD 0.2
 #define GYRO_DEV_THRESHOLD 0.2
 #define TILT_TRIGGER 0.3
-#define INIT_TILT_SIZE 20
-#define FINAL_TILT_SIZE 100
+#define INIT_TILT_SIZE 0.1*BUF_SIZE
+#define FINAL_TILT_SIZE 0.4*BUF_SIZE
 #define STATIONARY_THRESHOLD 0.23
 
 // BLE UART service
@@ -26,6 +28,7 @@ BLEUart bleuart;
 
 //Create a instance of class LSM6DS3
 LSM6DS3 myIMU(I2C_MODE, 0x6A);    //I2C device address 0x6A
+
 
 double cal_gx = 1.101100;
 double cal_gy = -2.472750;
@@ -50,12 +53,23 @@ float gsvm_buf[BUF_SIZE];
 int update_pos;
 bool avg_valid;
 
-float A_SVM; // accelerometer signal vector magnitude
 float A_SVM_mean;
-float G_SVM;
 float G_SVM_mean;
 
-float fall_event_val = 0;
+struct curr_vals_struct {
+    float ax;
+    float ay;
+    float az;
+    float gx;
+    float gy;
+    float gz;
+    float A_SVM; // signal vector magnitude
+    float G_SVM;
+    uint32_t curr_time;
+    float fall_event_val;
+};
+
+curr_vals_struct cv = {0, 0, 0, 0, 0, 0, 0, 0, 0, false};
 
 // motion classifer states 
 enum MOTION_STATES {
@@ -81,105 +95,92 @@ enum IMU_COMP {
     GYRO = 1
 } imu_comp;
 
-// enum LOCOMOTION_STATES {
-//     STANDING = 0,
-//     WALKING = 1,
-//     RUNNING = 2
-// } locomotion_state;
 
 void initialize_values() {
     fall_state = IDLE_FALL;
-    A_SVM = 0.0;
-    G_SVM = 0.0;
+    cv.A_SVM = 0.0;
+    cv.G_SVM = 0.0;
     update_pos = 0;
     avg_valid = false;
 }
 
-void update_values() {
+void update_values(bool update_buffers) {
     // read from the IMU
-    float ax = myIMU.readFloatAccelX() - cal_ax;
-    float ay = myIMU.readFloatAccelY() - cal_ay;
-    float az = myIMU.readFloatAccelZ() - cal_az;
+    cv.ax = myIMU.readFloatAccelX() - cal_ax;
+    cv.ay = myIMU.readFloatAccelY() - cal_ay;
+    cv.az = myIMU.readFloatAccelZ() - cal_az;
 
-    float gx = myIMU.readFloatGyroX() - cal_gx;
-    float gy = myIMU.readFloatGyroY() - cal_gy;
-    float gz = myIMU.readFloatGyroZ() - cal_gz;
+    cv.gx = myIMU.readFloatGyroX() - cal_gx;
+    cv.gy = myIMU.readFloatGyroY() - cal_gy;
+    cv.gz = myIMU.readFloatGyroZ() - cal_gz;
 
     // update SVMs
-    A_SVM = sqrt(sq(ax) + sq(ay) + sq(az));
-    G_SVM = sqrt(sq(gx) + sq(gy) + sq(gz));
+    cv.A_SVM = sqrt(sq(cv.ax) + sq(cv.ay) + sq(cv.az));
+    cv.G_SVM = sqrt(sq(cv.gx) + sq(cv.gy) + sq(cv.gz));
 
     // update buffers with new value
-    ax_buf[update_pos] = ax;
-    ay_buf[update_pos] = ay;
-    az_buf[update_pos] = az;
+    if(update_buffers) {
+        ax_buf[update_pos] = cv.ax;
+        ay_buf[update_pos] = cv.ay;
+        az_buf[update_pos] = cv.az;
 
-    gx_buf[update_pos] = gx;
-    gy_buf[update_pos] = gy;
-    gz_buf[update_pos] = gz;
+        gx_buf[update_pos] = cv.gx;
+        gy_buf[update_pos] = cv.gy;
+        gz_buf[update_pos] = cv.gz;
 
-    // might not need
-    asvm_buf[update_pos] = A_SVM;
-    gsvm_buf[update_pos] = G_SVM;
+        // might not need
+        asvm_buf[update_pos] = cv.A_SVM;
+        gsvm_buf[update_pos] = cv.G_SVM;
 
-    // increment position pointer
-    update_pos = (update_pos + 1) % BUF_SIZE;
+        // increment position pointer
+        update_pos = (update_pos + 1) % BUF_SIZE;
 
-    // update means
-    A_SVM_mean = (A_SVM_mean*(update_pos - 1))/(update_pos) + (A_SVM)/(update_pos);
-    G_SVM_mean = (G_SVM_mean*(update_pos - 1))/(update_pos) + (G_SVM)/(update_pos);
+        // update means
+        A_SVM_mean = (A_SVM_mean*(update_pos - 1))/(update_pos) + (cv.A_SVM)/(update_pos);
+        G_SVM_mean = (G_SVM_mean*(update_pos - 1))/(update_pos) + (cv.G_SVM)/(update_pos);
 
-    // update if the data is valid or not
-    if(!avg_valid & (update_pos >= BUF_SIZE)) {
-        avg_valid = true;
+        // update if the data is valid or not
+        if(!avg_valid & (update_pos >= BUF_SIZE)) {
+            avg_valid = true;
+        }
     }
     
 }
 
 void print_values() {
-    float ax = myIMU.readFloatAccelX() - cal_ax;
-    float ay = myIMU.readFloatAccelY() - cal_ay;
-    float az = myIMU.readFloatAccelZ() - cal_az;
+    Serial.print("AX: "); Serial.print(cv.ax); Serial.print(", ");
+    Serial.print("AY: "); Serial.print(cv.ay); Serial.print(", ");
+    Serial.print("AZ: "); Serial.print(cv.az); Serial.print(", ");
 
-    float gx = myIMU.readFloatGyroX() - cal_gx;
-    float gy = myIMU.readFloatGyroY() - cal_gy;
-    float gz = myIMU.readFloatGyroZ() - cal_gz;
+    Serial.print("GX: "); Serial.print(cv.gx); Serial.print(", ");
+    Serial.print("GY: "); Serial.print(cv.gy); Serial.print(", ");
+    Serial.print("GZ: "); Serial.print(cv.gz); Serial.print(", ");
 
-    A_SVM = sqrt(sq(ax) + sq(ay) + sq(az));
-    G_SVM = sqrt(sq(gx) + sq(gy) + sq(gz));
+    Serial.print("ASVM: "); Serial.print(cv.A_SVM); Serial.print(", ");
+    Serial.print("GSVM: "); Serial.print(cv.G_SVM); Serial.print(", ");
 
-    Serial.print("AX: "); Serial.print(ax); Serial.print(", ");
-    Serial.print("AY: "); Serial.print(ay); Serial.print(", ");
-    Serial.print("AZ: "); Serial.print(az); Serial.print(", ");
-
-    Serial.print("GX: "); Serial.print(gx); Serial.print(", ");
-    Serial.print("GY: "); Serial.print(gy); Serial.print(", ");
-    Serial.print("GZ: "); Serial.print(gz); Serial.print(", ");
-
-    Serial.print("ASVM: "); Serial.print(A_SVM); Serial.print(", ");
-    Serial.print("GSVM: "); Serial.print(G_SVM); Serial.print(", ");
-
-    Serial.print("FALL_EVENT: "); Serial.print(fall_event_val); Serial.print(", ");
+    Serial.print("FALL_EVENT: "); Serial.print(cv.fall_event_val); Serial.print(", ");
+    Serial.print("STATE: "); Serial.println(fall_state);
 }
 
 // send all IMU data points over BLEs
 void send_values() {
-    float ax = myIMU.readFloatAccelX() - cal_ax;
-    float ay = myIMU.readFloatAccelY() - cal_ay;
-    float az = myIMU.readFloatAccelZ() - cal_az;
 
-    float gx = myIMU.readFloatGyroX() - cal_gx;
-    float gy = myIMU.readFloatGyroY() - cal_gy;
-    float gz = myIMU.readFloatGyroZ() - cal_gz;
+    char buffer[160];
 
-    A_SVM = sqrt(sq(ax) + sq(ay) + sq(az));
-    G_SVM = sqrt(sq(gx) + sq(gy) + sq(gz));
+    cv.curr_time = millis();
 
-    char buffer[128];
+      // send time and fall_event values
+    snprintf(buffer, sizeof(buffer),
+            "%.lu,%.3f",
+            cv.curr_time, cv.fall_event_val);
+    Serial.print(buffer);
+    bleuart.print(buffer);
+    delay(50);
     // send accel values
     snprintf(buffer, sizeof(buffer),
-            "%.3f,%.3f,%.3f,",
-            ax, ay, az);
+            ",%.3f,%.3f,%.3f",
+            cv.ax, cv.ay, cv.az);
     bleuart.print(buffer);
     Serial.print(buffer);
     delay(50);
@@ -187,7 +188,7 @@ void send_values() {
     // send gyro values
     snprintf(buffer, sizeof(buffer),
             ",%.3f,%.3f,%.3f",
-            gx, gy, gz);
+            cv.gx, cv.gy, cv.gz);
     Serial.print(buffer);
     bleuart.print(buffer);
     delay(50);
@@ -195,18 +196,12 @@ void send_values() {
     // send svm values
     snprintf(buffer, sizeof(buffer),
             ",%.3f,%.3f",
-            A_SVM, G_SVM);
+            cv.A_SVM, cv.G_SVM);
     Serial.println(buffer);
     bleuart.print(buffer);
     delay(50);
 
-    // send fall_event values
-    snprintf(buffer, sizeof(buffer),
-            ",%.3f",
-            fall_event_val);
-    Serial.println(buffer);
-    bleuart.print(buffer);
-    delay(50);
+
 }
 
 // returns if there was a high acceleration event, also collect the BUF_SIZE
@@ -216,8 +211,8 @@ bool check_fall() {
     // reset update position
     update_pos = 0;
     for(int i = 0; i < BUF_SIZE; i++) {
-        update_values();
-        if(A_SVM >= CHECK_TRIGGER) {
+        update_values(1);
+        if(cv.A_SVM >= CHECK_TRIGGER) {
             large_accel = true;
         }
     }
@@ -292,12 +287,14 @@ void loop() {
 
     while(fall_state == IDLE_FALL) {
         // Serial.println("IN IDLE_FALL");
-        update_values();
+        update_values(1);
+        send_values();
         // right now this is just a instantaneous check but really should 
         // be some small running average
-        if(A_SVM >= IDLE_TRIGGER) {
+        if(cv.A_SVM >= IDLE_TRIGGER) {
             fall_state = CHECK_FALL;
         }
+        delay(LOOP_DELAY); // collecting values, so include a delay
     }
 
     if(fall_state == CHECK_FALL) {
@@ -344,11 +341,12 @@ void loop() {
 
     if(fall_state == DETECTED_FALL) {
         Serial.println("IN DETECTED_FALL");
-        fall_event_val = 1; // toggle fall signal and send
+        cv.fall_event_val = 1.0; // toggle fall signal and send
         send_values();
-        fall_event_val = 0;
+        cv.fall_event_val = 0.0;
 
         // go back to IDLE
+        initialize_values();
         fall_state = IDLE_FALL;
     }
 
