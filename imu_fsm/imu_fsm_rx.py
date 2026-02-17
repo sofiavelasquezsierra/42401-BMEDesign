@@ -21,7 +21,7 @@ async def collect(label, mode):
     async with BleakClient(device) as client:
         print("Connected.")
 
-        buffer = {"AX":0, "AY":0, "AZ":0, "GX":0, "GY":0, "GZ":0, "ASVM":0, "GSVM":0}
+        buffer = {"AX":0, "AY":0, "AZ":0, "GX":0, "GY":0, "GZ":0, "ASVM":0, "GSVM":0, "FALL_EVENT":0}
         recv_buffer = ""
 
         def handle(sender, data):
@@ -35,12 +35,10 @@ async def collect(label, mode):
                 parts = [p for p in recv_buffer.strip().split(",") if p != ""]
 
                 # Not enough numbers yet → wait for more BLE fragments
-                if len(parts) < 8:
+                if len(parts) < 9:
                     break
-
-                # We have AT LEAST 8 floats → parse first 8
                 try:
-                    ax, ay, az, gx, gy, gz, asvm, gsvm = map(float, parts[:8])
+                    ax, ay, az, gx, gy, gz, asvm, gsvm, fall_event = map(float, parts[:9])
                     buffer["AX"] = ax
                     buffer["AY"] = ay
                     buffer["AZ"] = az
@@ -49,11 +47,12 @@ async def collect(label, mode):
                     buffer["GZ"] = gz
                     buffer["ASVM"] = asvm
                     buffer["GSVM"] = gsvm
+                    buffer["FALL_EVENT"] = fall_event
                 except Exception as e:
                     print("Parse error:", e)
 
-                # Remove first 8 values from the buffer and keep the rest
-                remaining = parts[8:]
+                # Remove first 9 values from the buffer and keep the rest
+                remaining = parts[9:]
                 recv_buffer = ",".join(remaining)
                 break
 
@@ -63,7 +62,7 @@ async def collect(label, mode):
         with open(OUTPUT_FILE, "a", newline="") as f:
             writer = csv.writer(f)
             if f.tell() == 0:
-                writer.writerow(["timestamp","AX","AY","AZ","GX","GY","GZ","ASVM","GSVM","label"])
+                writer.writerow(["timestamp","AX","AY","AZ","GX","GY","GZ","ASVM","GSVM", "FALL_EVENT","label"])
 
             if mode == "continuous":
                 input("Move into position + press ENTER to start…\n")
@@ -74,7 +73,7 @@ async def collect(label, mode):
                             datetime.now().isoformat(),
                             buffer["AX"], buffer["AY"], buffer["AZ"],
                             buffer["GX"], buffer["GY"], buffer["GZ"],
-                            buffer["ASVM"], buffer["GSVM"],
+                            buffer["ASVM"], buffer["GSVM"], buffer["FALL_EVENT"],
                             label
                         ]
                         writer.writerow(row)
@@ -93,7 +92,7 @@ async def collect(label, mode):
                         datetime.now().isoformat(),
                         buffer["AX"], buffer["AY"], buffer["AZ"],
                         buffer["GX"], buffer["GY"], buffer["GZ"],
-                        buffer["ASVM"], buffer["GSVM"],
+                        buffer["ASVM"], buffer["GSVM"], buffer["FALL_EVENT"],
                         label
                     ]
                     writer.writerow(row)

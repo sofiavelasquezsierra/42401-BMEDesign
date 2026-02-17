@@ -5,22 +5,21 @@
 
 // constants
 const float G = 9.81;
+const float RAD_TO_DEG_CONV = 57.295779;
 
 // macros
 // These values are inspired by the paper
 #define BUF_SIZE 250
 #define IDLE_TRIGGER 0.8*G
-#define CHECK_TRIGGER 1.4*G
+#define CHECK_TRIGGER 1.0*G
 
 // TODO: These values are most definitely incorrect, update
 #define ACCEL_DEV_THRESHOLD 0.2
 #define GYRO_DEV_THRESHOLD 0.2
-#define TILT_THRESHOLD 0.3
+#define TILT_TRIGGER 0.3
 #define INIT_TILT_SIZE 20
 #define FINAL_TILT_SIZE 100
 #define STATIONARY_THRESHOLD 0.23
-
-#define RAD_TO_DEG 57.295779
 
 // BLE UART service
 BLEUart bleuart;
@@ -55,6 +54,8 @@ float A_SVM; // accelerometer signal vector magnitude
 float A_SVM_mean;
 float G_SVM;
 float G_SVM_mean;
+
+float fall_event_val = 0;
 
 // motion classifer states 
 enum MOTION_STATES {
@@ -135,6 +136,32 @@ void update_values() {
     
 }
 
+void print_values() {
+    float ax = myIMU.readFloatAccelX() - cal_ax;
+    float ay = myIMU.readFloatAccelY() - cal_ay;
+    float az = myIMU.readFloatAccelZ() - cal_az;
+
+    float gx = myIMU.readFloatGyroX() - cal_gx;
+    float gy = myIMU.readFloatGyroY() - cal_gy;
+    float gz = myIMU.readFloatGyroZ() - cal_gz;
+
+    A_SVM = sqrt(sq(ax) + sq(ay) + sq(az));
+    G_SVM = sqrt(sq(gx) + sq(gy) + sq(gz));
+
+    Serial.print("AX: "); Serial.print(ax); Serial.print(", ");
+    Serial.print("AY: "); Serial.print(ay); Serial.print(", ");
+    Serial.print("AZ: "); Serial.print(az); Serial.print(", ");
+
+    Serial.print("GX: "); Serial.print(gx); Serial.print(", ");
+    Serial.print("GY: "); Serial.print(gy); Serial.print(", ");
+    Serial.print("GZ: "); Serial.print(gz); Serial.print(", ");
+
+    Serial.print("ASVM: "); Serial.print(A_SVM); Serial.print(", ");
+    Serial.print("GSVM: "); Serial.print(G_SVM); Serial.print(", ");
+
+    Serial.print("FALL_EVENT: "); Serial.print(fall_event_val); Serial.print(", ");
+}
+
 // send all IMU data points over BLEs
 void send_values() {
     float ax = myIMU.readFloatAccelX() - cal_ax;
@@ -169,6 +196,14 @@ void send_values() {
     snprintf(buffer, sizeof(buffer),
             ",%.3f,%.3f",
             A_SVM, G_SVM);
+    Serial.println(buffer);
+    bleuart.print(buffer);
+    delay(50);
+
+    // send fall_event values
+    snprintf(buffer, sizeof(buffer),
+            ",%.3f",
+            fall_event_val);
     Serial.println(buffer);
     bleuart.print(buffer);
     delay(50);
@@ -218,14 +253,15 @@ bool posture_check() {
 
     // extremely naive implementation, optimize later
     for(int i = 0; i < INIT_TILT_SIZE; i++) {
-        tilt_init_sum += atan2(ay_buf[i], az_buf[i]) * RAD_TO_DEG;
+        tilt_init_sum += atan2(ay_buf[i], az_buf[i]) * RAD_TO_DEG_CONV;
     }
     for(int i = BUF_SIZE - FINAL_TILT_SIZE; i < BUF_SIZE; i++) {
-        tilt_final_sum += atan2(ay_buf[i], az_buf[i]) * RAD_TO_DEG;
+        tilt_final_sum += atan2(ay_buf[i], az_buf[i]) * RAD_TO_DEG_CONV;
     }
 
     tilt_diff = abs((tilt_final_sum/FINAL_TILT_SIZE) - (tilt_init_sum/INIT_TILT_SIZE));
-    return (tilt_diff >= TILT_THRESHOLD);
+    Serial.print("Calculated angle: "); Serial.print(tilt_diff); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER);
+    return (tilt_diff >= TILT_TRIGGER);
 }
 
 void setup() {
@@ -255,6 +291,7 @@ void loop() {
     // send_values();
 
     while(fall_state == IDLE_FALL) {
+        // Serial.println("IN IDLE_FALL");
         update_values();
         // right now this is just a instantaneous check but really should 
         // be some small running average
@@ -264,6 +301,7 @@ void loop() {
     }
 
     if(fall_state == CHECK_FALL) {
+        Serial.println("IN CHECK_FALL");
         if(check_fall()) {
             fall_state = STABILIZE_ACCEL_FALL;
         }
@@ -273,6 +311,7 @@ void loop() {
     }
 
     if(fall_state == STABILIZE_ACCEL_FALL) {
+        Serial.println("IN STABLIZE_ACCEL_FALL");
         if(std_dev_check(ACCEL, ACCEL_DEV_THRESHOLD)) {
             fall_state = STABILIZE_GYRO_FALL;
         }
@@ -283,6 +322,7 @@ void loop() {
     }
 
     if(fall_state == STABILIZE_GYRO_FALL) {
+        Serial.println("IN STABILIZE_GYRO_FALL");
         if(std_dev_check(GYRO, GYRO_DEV_THRESHOLD)) {
             fall_state = POSTURE_CHECK_FALL;
         }
@@ -293,7 +333,8 @@ void loop() {
     }
 
     if(fall_state == POSTURE_CHECK_FALL) {
-        if(posture_check(TILT_TRIGGER)) {
+        Serial.println("IN POSTURE_CHECK_FALL");
+        if(posture_check()) {
             fall_state = DETECTED_FALL;
         }
         else {
@@ -302,7 +343,13 @@ void loop() {
     }
 
     if(fall_state == DETECTED_FALL) {
+        Serial.println("IN DETECTED_FALL");
+        fall_event_val = 1; // toggle fall signal and send
         send_values();
+        fall_event_val = 0;
+
+        // go back to IDLE
+        fall_state = IDLE_FALL;
     }
 
     delay(100);
