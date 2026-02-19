@@ -12,8 +12,8 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define LOOP_DELAY 100
 // These values are inspired by the paper
 #define BUF_SIZE 200
-#define IDLE_TRIGGER 0.8*G
-#define CHECK_TRIGGER 1.0*G
+#define IDLE_TRIGGER 0.5*G
+#define CHECK_TRIGGER 0.8*G
 
 // TODO: These values are most definitely incorrect, update
 #define ACCEL_DEV_THRESHOLD 0.2
@@ -66,6 +66,7 @@ struct curr_vals_struct {
     float A_SVM; // signal vector magnitude
     float G_SVM;
     uint32_t curr_time;
+    uint32_t delta_time;
     float fall_event_val;
 };
 
@@ -168,22 +169,16 @@ void send_values() {
 
     char buffer[160];
 
-    cv.curr_time = millis();
+    cv.delta_time = millis() - cv.curr_time; // very naive, optimize later
+    cv.curr_time = cv.curr_time + cv.delta_time;
 
-      // send time and fall_event values
-    snprintf(buffer, sizeof(buffer),
-            "%.lu,%.3f",
-            cv.curr_time, cv.fall_event_val);
-    Serial.print(buffer);
-    bleuart.print(buffer);
-    delay(50);
     // send accel values
     snprintf(buffer, sizeof(buffer),
-            ",%.3f,%.3f,%.3f",
+            "%.3f,%.3f,%.3f",
             cv.ax, cv.ay, cv.az);
     bleuart.print(buffer);
     Serial.print(buffer);
-    delay(50);
+    delay(10);
 
     // send gyro values
     snprintf(buffer, sizeof(buffer),
@@ -191,18 +186,45 @@ void send_values() {
             cv.gx, cv.gy, cv.gz);
     Serial.print(buffer);
     bleuart.print(buffer);
-    delay(50);
+    delay(10);
 
     // send svm values
     snprintf(buffer, sizeof(buffer),
             ",%.3f,%.3f",
             cv.A_SVM, cv.G_SVM);
+    Serial.print(buffer);
+    bleuart.print(buffer);
+    delay(10);
+
+      // send time and fall_event values
+    snprintf(buffer, sizeof(buffer),
+            ",%.lu,%.3f",
+            cv.delta_time, cv.fall_event_val);
     Serial.println(buffer);
     bleuart.print(buffer);
-    delay(50);
-
+    delay(10);
 
 }
+
+// void send_values() {
+
+//     char buffer[160];
+
+//     cv.curr_time = millis();
+
+//     snprintf(buffer, sizeof(buffer),
+//         "%lu,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
+//         cv.curr_time,
+//         cv.fall_event_val,
+//         cv.ax, cv.ay, cv.az,
+//         cv.gx, cv.gy, cv.gz,
+//         cv.A_SVM, cv.G_SVM
+//     );
+
+//     bleuart.println(buffer);   // BLE UART
+//     Serial.println(buffer);    // USB serial (optional)
+// }
+
 
 // returns if there was a high acceleration event, also collect the BUF_SIZE
 // samples for later processing

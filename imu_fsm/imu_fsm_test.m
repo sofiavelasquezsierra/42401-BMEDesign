@@ -1,6 +1,6 @@
 % Test code for checking out the collected data
 
-T0 = readtable('./data_collection_1/willa_lying_idle.csv');
+T0 = readtable('./data_collection_2_harry/harry_falling_left_0.csv');
 
 dataCols = setdiff(T0.Properties.VariableNames, {'timestamp','label'});
 D0 = T0{:, dataCols};          % numeric data only
@@ -12,10 +12,8 @@ time0  = seconds(T0.timestamp - T0.timestamp(1));
 
 figure;
 subplot(2,1,1);
-% plot(time0, T0.ASVM);
 plot(time0, T0.AX);
 hold on;
-% plot(time0, T0.GSVM);
 plot(time0, T0.AY);
 plot(time0, T0.AZ);
 plot(time0, T0.ASVM);

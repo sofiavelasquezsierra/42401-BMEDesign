@@ -21,28 +21,36 @@ async def collect(label, mode):
     async with BleakClient(device) as client:
         print("Connected.")
 
-        buffer = {"mcu_time": 0, "FALL_EVENT":0, "AX":0, "AY":0, "AZ":0, "GX":0, "GY":0, "GZ":0, "ASVM":0, "GSVM":0}
+        buffer = {
+            "mcu_time": 0, "FALL_EVENT":0,
+            "AX":0, "AY":0, "AZ":0,
+            "GX":0, "GY":0, "GZ":0,
+            "ASVM":0, "GSVM":0
+        }
         recv_buffer = ""
+        new_packet = False
+
 
         def handle(sender, data):
-            nonlocal recv_buffer, buffer
+            nonlocal recv_buffer, buffer, new_packet
+            
+            recv_buffer += data.decode(errors="ignore")
+            
+            print(recv_buffer)
 
-            text = data.decode(errors="ignore")
-            recv_buffer += text
+            while "|" in recv_buffer:
+                # Extract one full packet
+                packet, recv_buffer = recv_buffer.split("|", 1)
 
-            while True:
-                parts = recv_buffer.split(",")
+                fields = packet.split(",")
 
-                # need 10 full fields
-                if len(parts) < 11:   # 10 values + trailing remainder
-                    break
-
-                fields = parts[:10]
-                recv_buffer = ",".join(parts[10:])  # keep exact remainder
+                if len(fields) != 10:
+                    # Packet misaligned or corrupted; skip
+                    continue
 
                 try:
-                    buffer["mcu_time"] = int(float(fields[0]))
-                    buffer["FALL_EVENT"] = int(float(fields[1]))
+                    buffer["mcu_time"]   = int(fields[0])
+                    buffer["FALL_EVENT"] = float(fields[1])
                     buffer["AX"] = float(fields[2])
                     buffer["AY"] = float(fields[3])
                     buffer["AZ"] = float(fields[4])
@@ -51,35 +59,12 @@ async def collect(label, mode):
                     buffer["GZ"] = float(fields[7])
                     buffer["ASVM"] = float(fields[8])
                     buffer["GSVM"] = float(fields[9])
-                except Exception as e:
-                    print("Parse error:", e, fields)
-            
-            # # Try parsing as long as at least some commas are present
-            # while True:
-            #     parts = [p for p in recv_buffer.strip().split(",") if p != ""]
+                except ValueError:
+                    continue
 
-            #     # Not enough numbers yet → wait for more BLE fragments
-            #     if len(parts) < 10:
-            #         break
-            #     try:
-            #         mcu_time, fall_event, ax, ay, az, gx, gy, gz, asvm, gsvm = map(float, parts[:10])
-            #         buffer["mcu_time"] = mcu_time
-            #         buffer["FALL_EVENT"] = fall_event
-            #         buffer["AX"] = ax
-            #         buffer["AY"] = ay
-            #         buffer["AZ"] = az
-            #         buffer["GX"] = gx
-            #         buffer["GY"] = gy
-            #         buffer["GZ"] = gz
-            #         buffer["ASVM"] = asvm
-            #         buffer["GSVM"] = gsvm
-            #     except Exception as e:
-            #         print("Parse error:", e)
+                new_packet = True
 
-                # Remove first 9 values from the buffer and keep the rest
-                remaining = parts[10:]
-                recv_buffer = ",".join(remaining)
-                break
+
 
         # Enable BLE notifications
         await client.start_notify(RX_UUID, handle)
@@ -94,18 +79,20 @@ async def collect(label, mode):
                 print("Recording (CTRL+C to stop)…\n")
                 try:
                     while True:
-                        row = [
-                            # datetime.now().isoformat(),
-                            buffer["mcu_time"],
-                            buffer["FALL_EVENT"],
-                            buffer["AX"], buffer["AY"], buffer["AZ"],
-                            buffer["GX"], buffer["GY"], buffer["GZ"],
-                            buffer["ASVM"], buffer["GSVM"],
-                            label
-                        ]
-                        writer.writerow(row)
-                        print(label, row)
-                        await asyncio.sleep(0.02)
+                        if new_packet:
+                            row = [
+                                # datetime.now().isoformat(),
+                                buffer["mcu_time"],
+                                buffer["FALL_EVENT"],
+                                buffer["AX"], buffer["AY"], buffer["AZ"],
+                                buffer["GX"], buffer["GY"], buffer["GZ"],
+                                buffer["ASVM"], buffer["GSVM"],
+                                label
+                            ]
+                            writer.writerow(row)
+                            print(label, row)
+                            new_packet = False
+                        await asyncio.sleep(0.005)
                 except KeyboardInterrupt:
                     print("Stopped.\n")
 
