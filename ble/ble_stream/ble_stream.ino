@@ -79,16 +79,17 @@ void loop() {
     }
 
     // Serial Plotter: IR,RED
-    Serial.print(ir_raw);
-    Serial.print(",");
-    Serial.println(red_raw);
+    // Serial.print(ir_raw);
+    // Serial.print(",");
+    // Serial.println(red_raw);
 
     // BLE send
     ble_decim++;
-    if (ble_decim >= 4) {
+    if ((ble_decim >= 4) | Serial) {
       ble_decim = 0;
 
-      if (Bluefruit.connected()) {
+      // stream data either when BLE connected or serial connected
+      if (Bluefruit.connected() | Serial) {
         // Read IMU once per BLE tick
         float ax = imu.readFloatAccelX();
         float ay = imu.readFloatAccelY();
@@ -96,6 +97,24 @@ void loop() {
         float gx = imu.readFloatGyroX();
         float gy = imu.readFloatGyroY();
         float gz = imu.readFloatGyroZ();
+
+        float ASVM = sqrt(ax*ax + ay*ay + az*az);
+        float GSVM = sqrt(gx*gx + gy*gy + gz*gz);
+
+        Serial.print("IR_RAW: "); Serial.print(ir_raw); Serial.print("; ");
+        Serial.print("RED_RAW: "); Serial.print(red_raw); Serial.print("; ");
+
+        Serial.print("AX: "); Serial.print(ax); Serial.print("; ");
+        Serial.print("AY: "); Serial.print(ay); Serial.print("; ");
+        Serial.print("AZ: "); Serial.print(az); Serial.print("; ");
+
+        Serial.print("GX: "); Serial.print(gx); Serial.print("; ");
+        Serial.print("GY: "); Serial.print(gy); Serial.print("; ");
+        Serial.print("GZ: "); Serial.print(gz); Serial.print("; ");
+
+        Serial.print("ASVM: "); Serial.print(ASVM); Serial.print("; ");
+        Serial.print("GSVM: "); Serial.print(GSVM); Serial.print("; ");
+
 
         // Scale to fixed-point
         // accel: 0.01 g
@@ -126,6 +145,7 @@ void loop() {
         red_raw &= 0x3FFFF;
 
         uint32_t ts = last_ts - t0;
+        Serial.print("MCU_TIME: "); Serial.println(ts);
 
         // P packet: 11 bytes
         // 'P' + ts(4) + ir(3) + red(3)
@@ -142,9 +162,7 @@ void loop() {
         p[8]  = (uint8_t)(red_raw & 0xFF);
         p[9]  = (uint8_t)((red_raw >> 8) & 0xFF);
         p[10] = (uint8_t)((red_raw >> 16) & 0x03);
-
-        bleuart.write(p, sizeof(p));
-
+  
         // A packet: 11 bytes
         uint8_t a[11];
         a[0] = 'A';
@@ -152,7 +170,7 @@ void loop() {
         memcpy(&a[5], &ax16, 2);
         memcpy(&a[7], &ay16, 2);
         memcpy(&a[9], &az16, 2);
-        bleuart.write(a, sizeof(a));
+
 
         // G packet: 11 bytes
         uint8_t g[11];
@@ -161,7 +179,17 @@ void loop() {
         memcpy(&g[5], &gx16, 2);
         memcpy(&g[7], &gy16, 2);
         memcpy(&g[9], &gz16, 2);
-        bleuart.write(g, sizeof(g));
+
+        if(Bluefruit.connected()) {
+          bleuart.write(p, sizeof(p));
+          bleuart.write(a, sizeof(a));
+          bleuart.write(g, sizeof(g));
+        }
+      }
+
+      // boost sampling rate if just going over Serial port
+      if(!Bluefruit.connected() & Serial) {
+        delay(25);
       }
     }
 
