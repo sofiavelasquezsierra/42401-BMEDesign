@@ -1,7 +1,7 @@
 % Test code for checking out the collected data
 set(groot, 'defaultTextInterpreter', 'None');
 
-file_name = './serial_data_test/lilly_walking_1.csv';
+file_name = './serial_data_test/lilly_fall_forward_2.csv';
 T0 = readtable(file_name);
 
 dataCols = T0.Properties.VariableNames( ...
