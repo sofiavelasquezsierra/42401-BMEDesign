@@ -1,11 +1,13 @@
 % Test code for checking out the collected data
 set(groot, 'defaultTextInterpreter', 'None');
 
-file_name = './data_collection_2_harry/harry_falling_forward_2.csv';
+file_name = './serial_data_test/lilly_walking_1.csv';
 T0 = readtable(file_name);
 
-dataCols = setdiff(T0.Properties.VariableNames, {'timestamp','label'});
-D0 = T0{:, dataCols};          % numeric data only
+dataCols = T0.Properties.VariableNames( ...
+    varfun(@isnumeric, T0, 'OutputFormat','uniform') ...
+);
+D0 = T0{:, dataCols};
 idx = [true; any(diff(D0) ~= 0, 2)];
 
 T0 = T0(idx, :);
@@ -19,7 +21,7 @@ end
 
 time0 = time0./1000;
 
-figure_name = file_name + "; Sample size: " + size(time0, 1);
+figure_name = file_name + "; Sample size: " + size(time0, 2);
 
 
 figure;
@@ -30,7 +32,7 @@ hold on;
 % plot(time0, T0.AZ);
 plot(time0, T0.ASVM);
 % legend("AX", "AY", "AZ", "ASVM");
-title(figure_name);
+title("ASVM", figure_name);
 hold off;
 
 subplot(2,1,2);
@@ -39,6 +41,6 @@ hold on;
 % plot(time0, T0.GY);
 % plot(time0, T0.GZ);
 plot(time0, T0.GSVM);
-title(figure_name)
+title("GSVM", figure_name)
 hold off;
 % legend("GX", "GY", "GZ", "GSVM");
