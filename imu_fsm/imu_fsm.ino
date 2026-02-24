@@ -165,7 +165,7 @@ void print_values() {
 }
 
 // send all IMU data points over BLEs
-void send_values() {
+void send_values_BLE() {
 
     char buffer[160];
 
@@ -204,6 +204,37 @@ void send_values() {
     bleuart.print(buffer);
     delay(10);
 
+    delay(25);
+}
+
+void send_values_serial() {
+    char buffer[160];
+
+    cv.delta_time = millis() - cv.curr_time; // very naive, optimize later
+    cv.curr_time = cv.curr_time + cv.delta_time;
+
+    // send accel values
+    snprintf(buffer, sizeof(buffer),
+            "%.3f,%.3f,%.3f",
+            cv.ax, cv.ay, cv.az);
+    Serial.print(buffer);
+
+    // send gyro values
+    snprintf(buffer, sizeof(buffer),
+            ",%.3f,%.3f,%.3f",
+            cv.gx, cv.gy, cv.gz);
+    Serial.print(buffer);
+
+    // send svm values
+    snprintf(buffer, sizeof(buffer),
+            ",%.3f,%.3f",
+            cv.A_SVM, cv.G_SVM);
+    Serial.print(buffer);
+      // send time and fall_event values
+    snprintf(buffer, sizeof(buffer),
+            ",%.lu,%.3f",
+            cv.delta_time, cv.fall_event_val);
+    Serial.println(buffer);
 }
 
 // void send_values() {
@@ -310,7 +341,7 @@ void loop() {
     while(fall_state == IDLE_FALL) {
         // Serial.println("IN IDLE_FALL");
         update_values(1);
-        send_values();
+        send_values_BLE();
         // right now this is just a instantaneous check but really should 
         // be some small running average
         if(cv.A_SVM >= IDLE_TRIGGER) {
@@ -320,6 +351,7 @@ void loop() {
     }
 
     if(fall_state == CHECK_FALL) {
+        send_values_BLE();
         Serial.println("IN CHECK_FALL");
         if(check_fall()) {
             fall_state = STABILIZE_ACCEL_FALL;
@@ -330,6 +362,7 @@ void loop() {
     }
 
     if(fall_state == STABILIZE_ACCEL_FALL) {
+        send_values_BLE();
         Serial.println("IN STABLIZE_ACCEL_FALL");
         if(std_dev_check(ACCEL, ACCEL_DEV_THRESHOLD)) {
             fall_state = STABILIZE_GYRO_FALL;
@@ -341,6 +374,7 @@ void loop() {
     }
 
     if(fall_state == STABILIZE_GYRO_FALL) {
+        send_values_BLE();
         Serial.println("IN STABILIZE_GYRO_FALL");
         if(std_dev_check(GYRO, GYRO_DEV_THRESHOLD)) {
             fall_state = POSTURE_CHECK_FALL;
@@ -352,6 +386,7 @@ void loop() {
     }
 
     if(fall_state == POSTURE_CHECK_FALL) {
+        send_values_BLE();
         Serial.println("IN POSTURE_CHECK_FALL");
         if(posture_check()) {
             fall_state = DETECTED_FALL;
@@ -364,7 +399,7 @@ void loop() {
     if(fall_state == DETECTED_FALL) {
         Serial.println("IN DETECTED_FALL");
         cv.fall_event_val = 1.0; // toggle fall signal and send
-        send_values();
+        send_values_BLE();
         cv.fall_event_val = 0.0;
 
         // go back to IDLE
