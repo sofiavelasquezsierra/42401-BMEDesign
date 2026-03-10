@@ -1,4 +1,5 @@
 # live_serial_plot.py
+# run ble_stream.ino concurrently to get the data
 import re
 import time
 from collections import deque

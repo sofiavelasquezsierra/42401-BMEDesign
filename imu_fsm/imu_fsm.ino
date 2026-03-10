@@ -12,16 +12,19 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define LOOP_DELAY 25
 // These values are inspired by the paper
 #define BUF_SIZE 200
-#define IDLE_TRIGGER 0.5*G
-#define CHECK_TRIGGER 0.8*G
+#define IDLE_TRIGGER 0.7 // Modified since 0.8 was too lenient
+#define CHECK_TRIGGER 1.4
 
-// TODO: These values are most definitely incorrect, update
-#define ACCEL_DEV_THRESHOLD 0.2
-#define GYRO_DEV_THRESHOLD 0.2
+// These values are inspired by the data
+#define ACCEL_DEV_THRESHOLD 0.06
+#define GYRO_DEV_THRESHOLD 16.3
+#define DEV_BUFFER_SIZE 50
 #define TILT_TRIGGER 0.3
 #define INIT_TILT_SIZE 0.1*BUF_SIZE
 #define FINAL_TILT_SIZE 0.4*BUF_SIZE
 #define STATIONARY_THRESHOLD 0.23
+
+// Note: the AY value is actually the "AZ" due to the orientation of the device lol
 
 // BLE UART service
 BLEUart bleuart;
@@ -277,17 +280,20 @@ bool check_fall() {
     return large_accel;
 }
 
+// Calculate stdev over the last DEV_BUFFER_SIZE samples of the buffer
+// If doesn't work, consider doing a comparison between earlier samples
+// and later samples to show stabilization
 bool std_dev_check(IMU_COMP dev_type, float threshold) {
     float sum = 0.0;
     float std = 0.0;
     // naive implementation, optimize if lag is too bad
     if(dev_type == ACCEL) {
-        for(int i = 0; i < BUF_SIZE; i++) {
+        for(int i = BUF_SIZE - DEV_BUFFER_SIZE; i < BUF_SIZE; i++) {
         sum = ((sum + asvm_buf[i])*(sum + asvm_buf[i]))/(BUF_SIZE);
         }
     }
     else {
-        for(int i = 0; i < BUF_SIZE; i++) {
+        for(int i = BUF_SIZE - DEV_BUFFER_SIZE ; i < BUF_SIZE; i++) {
         sum = ((sum + gsvm_buf[i])*(sum + gsvm_buf[i]))/(BUF_SIZE);
         }
     }
@@ -349,7 +355,7 @@ void loop() {
         send_values_serial();
         // right now this is just a instantaneous check but really should 
         // be some small running average
-        if(cv.A_SVM >= IDLE_TRIGGER) {
+        if(cv.A_SVM <= IDLE_TRIGGER) {
             fall_state = CHECK_FALL;
         }
         delay(LOOP_DELAY); // collecting values, so include a delay
