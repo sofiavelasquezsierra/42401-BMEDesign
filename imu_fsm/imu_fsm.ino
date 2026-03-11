@@ -12,17 +12,21 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define LOOP_DELAY 25
 // These values are inspired by the paper
 #define BUF_SIZE 200
-#define IDLE_TRIGGER 0.7 // Modified since 0.8 was too lenient
+#define IDLE_TRIGGER 0.75 // 0.8 in paper but that was slightly too lenient
 #define CHECK_TRIGGER 1.4
 
 // These values are inspired by the data
-#define ACCEL_DEV_THRESHOLD 0.06
-#define GYRO_DEV_THRESHOLD 16.3
-#define DEV_BUFFER_SIZE 50
+#define ACCEL_DEV_THRESHOLD 0.06 // 0.1 in the paper
+#define GYRO_DEV_THRESHOLD 16.3 // 10 in the paper
+#define DEV_BUFFER_SIZE 50 // same as paper
+
+// straight comparison to 60 degrees in the paper
+#define TILT_TRIGGER_ANGLE 60
+// relative comparison
 #define TILT_TRIGGER 0.3
 #define INIT_TILT_SIZE 0.1*BUF_SIZE
 #define FINAL_TILT_SIZE 0.4*BUF_SIZE
-#define STATIONARY_THRESHOLD 0.23
+#define STATIONARY_THRESHOLD 0.15
 
 // Note: the AY value is actually the "AZ" due to the orientation of the device lol
 
@@ -92,6 +96,7 @@ enum FALL_STATES {
     STABILIZE_GYRO_FALL = 3,
     POSTURE_CHECK_FALL = 4,
     DETECTED_FALL = 5,
+    STATIONARY_POST_FALL = 6
 } fall_state;
 
 String fall_state_strings[6] = {"IDLE_FALL", "CHECK_FALL", "STABILIZE_ACCEL_FALL", "STABILIZE_GYRO_FALL", "POSTURE_CHECK_FALL", "DETECTED_FALL"};
@@ -304,25 +309,64 @@ bool std_dev_check(IMU_COMP dev_type, float threshold) {
     
 }
 
-// really just a angle difference check
+// really just a angle percent difference check
 bool posture_check() {
     float tilt_diff = 0.0;
     float tilt_init_sum = 0.0;
     float tilt_final_sum = 0.0;
+    float hor_dist = 0.0;
 
     // extremely naive implementation, optimize later
     for(int i = 0; i < INIT_TILT_SIZE; i++) {
-        tilt_init_sum += atan2(ay_buf[i], az_buf[i]) * RAD_TO_DEG_CONV;
+        hor_dist = sqrt(ax_buf[i]*ax_buf[i], az_buf[i]*az_buf[i]);
+        tilt_init_sum += atan2(ay_buf[i], hor_dist);
     }
     for(int i = BUF_SIZE - FINAL_TILT_SIZE; i < BUF_SIZE; i++) {
-        tilt_final_sum += atan2(ay_buf[i], az_buf[i]) * RAD_TO_DEG_CONV;
+        hor_dist = sqrt(ax_buf[i]*ax_buf[i], az_buf[i]*az_buf[i]);
+        tilt_final_sum += atan2(ay_buf[i], hor_dist);
     }
 
-    tilt_diff = abs((tilt_final_sum/FINAL_TILT_SIZE) - (tilt_init_sum/INIT_TILT_SIZE));
+    tilt_diff = (abs((tilt_final_sum/FINAL_TILT_SIZE) - (tilt_init_sum/INIT_TILT_SIZE)))/(tilt_init_sum);
     Serial.print("Calculated angle: "); Serial.print(tilt_diff); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER);
     return (tilt_diff >= TILT_TRIGGER);
 }
 
+bool posture_check_angle() {
+    float tilt_final_sum = 0.0;
+    float hor_dist = 0.0;
+
+    // angle to the horizontal plane among last samples
+    for(int i = BUF_SIZE - FINAL_TILT_SIZE; i < BUF_SIZE; i++) {
+        hor_dist = sqrt(ax_buf[i]*ax_buf[i], az_buf[i]*az_buf[i]);
+        tilt_final_sum += atan2(ay_buf[i], hor_dist);
+    }
+
+    float tilt_final_angle = abs(((tilt_final_sum*RAD_TO_DEG_CONV)/FINAL_TILT_SIZE))
+    Serial.print("Calculated angle: "); Serial.print(tilt_final_angle); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER_ANGLE);
+    return (tilt_final_angle <= TILT_TRIGGER_ANGLE);
+}
+
+void update_buffer() {
+    // reset update position
+    update_pos = 0;
+    for(int i = 0; i < BUF_SIZE; i++) {
+        update_values(1);
+    }
+    return;
+}
+
+bool check_stationary() {
+    bool stationary = false;
+    float sum = 0.0;
+    for(int i = 0; i < BUF_SIZE; i++) {
+        sum = sum + asvm_buf[i];
+    }
+
+    float avg_asvm = sum / BUF_SIZE;
+    // ASVM = 1 when stationary
+    stationary = (abs(avg_asvm - 1) <= STATIONARY_THRESHOLD);
+    return stationary;
+}
 void setup() {
     Serial.begin(115200);
     while (!Serial);
@@ -349,7 +393,7 @@ void setup() {
 void loop() {
     // send_values();
 
-    while(fall_state == IDLE_FALL) {
+    if(fall_state == IDLE_FALL) {
         // Serial.println("IN IDLE_FALL");
         // update_values(1);
         send_values_serial();
@@ -358,7 +402,9 @@ void loop() {
         if(cv.A_SVM <= IDLE_TRIGGER) {
             fall_state = CHECK_FALL;
         }
-        delay(LOOP_DELAY); // collecting values, so include a delay
+        else {
+            fall_state = IDLE_FALL;
+        }
     }
 
     if(fall_state == CHECK_FALL) {
@@ -390,7 +436,6 @@ void loop() {
         if(std_dev_check(GYRO, GYRO_DEV_THRESHOLD)) {
             fall_state = POSTURE_CHECK_FALL;
         }
-
         else {
             fall_state = IDLE_FALL;
         }
@@ -399,7 +444,7 @@ void loop() {
     if(fall_state == POSTURE_CHECK_FALL) {
         send_values_serial();
         Serial.println("IN POSTURE_CHECK_FALL");
-        if(posture_check()) {
+        if(posture_check_angle()) {
             fall_state = DETECTED_FALL;
         }
         else {
@@ -413,9 +458,31 @@ void loop() {
         send_values_serial();
         cv.fall_event_val = 0.0;
 
-        // go back to IDLE
-        initialize_values();
-        fall_state = IDLE_FALL;
+        // check if stationary post fall
+        update_buffer();
+        if(check_stationary()) {
+            fall_state = STATIONARY_POST_FALL;
+        }
+        else {
+            // go back to IDLE if moving again
+            initialize_values();
+            fall_state = IDLE_FALL;
+        }
+    }
+
+    if(fall_state == STATIONARY_POST_FALL) {
+        Serial.println("IN STATIONARY_POST_FALL");
+        send_values_serial();
+        update_buffer(1);
+        // stay in this state if still unmoving
+        if(check_stationary()) {
+            fall_state = STATIONARY_POST_FALL;
+        }
+        // return to idle
+        else {
+            initialize_values();
+            fall_state = IDLE_FALL;
+        }
     }
 
     delay(LOOP_DELAY);
