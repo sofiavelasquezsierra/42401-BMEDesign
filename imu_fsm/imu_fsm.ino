@@ -7,7 +7,7 @@
 // constants
 const float G = 9.81;
 const float RAD_TO_DEG_CONV = 57.295779;
-
+const bool USE_BLE = false;
 // macros
 
 // should run at 100Hz
@@ -15,7 +15,6 @@ const float RAD_TO_DEG_CONV = 57.295779;
 
 // These values are inspired by the paper
 #define BUF_SIZE 200
-#define BUF_SMALL 100
 #define IDLE_TRIGGER 0.85 // 0.8 in paper but increased to allow for walk/run detection
 #define CHECK_TRIGGER 1.4
 
@@ -29,6 +28,7 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define ACCEL_DEV_RUNNING 0.4 // from the data but need more trials
 #define WALKING_SPM_MIN 75
 #define RUNNING_SPM_MIN 150
+#define BUF_SMALL 100 // calculate these things over a smaller buffer to improve responsiveness
 #define PEAK_BUF_SIZE 10
 
 
@@ -87,10 +87,11 @@ struct curr_vals_struct {
     float G_SVM;
     uint32_t curr_time;
     uint32_t delta_time;
+    float fall_impact;
     float fall_event_val;
 };
 
-curr_vals_struct cv = {0, 0, 0, 0, 0, 0, 0, 0, 0, false};
+curr_vals_struct cv = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false};
 
 // motion classifer states, sorry for the bad naming
 enum FALL_STATES {
@@ -180,47 +181,23 @@ void print_values() {
     Serial.print("STATE: "); Serial.println(fall_state);
 }
 
-// send all IMU data points over BLEs
+// TODO: send only critical values over BLE:
+// MCU_time, fall_state if in {DETECTED_FALL, STATIONARY_POST_FALL, 
+// WALKING, RUNNING, JUMPING_OR_QUICK_SIT}, fall impact in Gs (add later)
 void send_values_BLE() {
+    update_values(1);
 
     char buffer[160];
 
     cv.delta_time = millis() - cv.curr_time; // very naive, optimize later
     cv.curr_time = cv.curr_time + cv.delta_time;
 
-    // send accel values
+    // send time and motion information
     snprintf(buffer, sizeof(buffer),
-            "%.3f,%.3f,%.3f",
-            cv.ax, cv.ay, cv.az);
-    bleuart.print(buffer);
-    Serial.print(buffer);
-    delay(10);
-
-    // send gyro values
-    snprintf(buffer, sizeof(buffer),
-            ",%.3f,%.3f,%.3f",
-            cv.gx, cv.gy, cv.gz);
-    Serial.print(buffer);
-    bleuart.print(buffer);
-    delay(10);
-
-    // send svm values
-    snprintf(buffer, sizeof(buffer),
-            ",%.3f,%.3f",
-            cv.A_SVM, cv.G_SVM);
-    Serial.print(buffer);
-    bleuart.print(buffer);
-    delay(10);
-
-      // send time and fall_event values
-    snprintf(buffer, sizeof(buffer),
-            ",%.lu,%.3f",
-            cv.delta_time, cv.fall_event_val);
+            ",%.lu,%.3f,%.3f",
+            cv.delta_time, cv.fall_event_val, cv.fall_impact);
     Serial.println(buffer);
     bleuart.print(buffer);
-    delay(10);
-
-    delay(25);
 }
 
 void send_values_serial() {
@@ -256,40 +233,35 @@ void send_values_serial() {
     Serial.println(fall_state_strings[fall_state]);
 }
 
-// void send_values() {
-
-//     char buffer[160];
-
-//     cv.curr_time = millis();
-
-//     snprintf(buffer, sizeof(buffer),
-//         "%lu,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
-//         cv.curr_time,
-//         cv.fall_event_val,
-//         cv.ax, cv.ay, cv.az,
-//         cv.gx, cv.gy, cv.gz,
-//         cv.A_SVM, cv.G_SVM
-//     );
-
-//     bleuart.println(buffer);   // BLE UART
-//     Serial.println(buffer);    // USB serial (optional)
-// }
-
-
+void send_values() {
+    if(USE_BLE) {
+        send_values_BLE();
+    }
+    else {
+        send_values_serial();
+    }
+}
 // returns if there was a high acceleration event, also collect the BUF_SIZE
 // samples for later processing
 bool check_fall() {
     bool large_accel = false;
     // reset update position
     update_pos = 0;
+    float max_accel = 0;
     for(int i = 0; i < BUF_SIZE; i++) {
         // update_values(1);
-        send_values_serial();
+        send_values();
         if(cv.A_SVM >= CHECK_TRIGGER) {
             large_accel = true;
         }
+        // also update a maximum acceleration for later use
+        if(cv.ASVM >= max_accel) {
+            max_accel = cv.ASVM;
+        }
         delay(LOOP_DELAY); // delay since collecting samples
     }
+
+    cv.fall_impact = max_accel;
     return large_accel;
 }
 
@@ -427,12 +399,10 @@ void setup() {
 
 // FSM style motion detection
 void loop() {
-    // send_values();
-
     if(fall_state == IDLE_FALL) {
         // Serial.println("IN IDLE_FALL");
         // update_values(1);
-        send_values_serial();
+        send_values();
         cv.fall_event_val = 0.0;
         // right now this is just a instantaneous check but really should 
         // be some small running average
@@ -445,7 +415,7 @@ void loop() {
     }
 
     if(fall_state == CHECK_FALL) {
-        send_values_serial();
+        send_values();
         Serial.println("IN CHECK_FALL");
         // collect buffer of samples and send
         if(check_fall()) {
@@ -457,7 +427,7 @@ void loop() {
     }
 
     if(fall_state == STABILIZE_FALL) {
-        send_values_serial();
+        send_values();
         Serial.println("IN STABLIZE_ACCEL_FALL");
         // calculate standard deviations over the buffer
         float std_accel = std_dev_check(ACCEL, BUF_SIZE);
@@ -488,7 +458,7 @@ void loop() {
     }
 
     if(fall_state == POSTURE_CHECK_FALL) {
-        send_values_serial();
+        send_values();
         Serial.println("IN POSTURE_CHECK_FALL");
         if(posture_check_angle()) {
             fall_state = DETECTED_FALL;
@@ -501,7 +471,7 @@ void loop() {
     if(fall_state == DETECTED_FALL) {
         Serial.println("IN DETECTED_FALL");
         cv.fall_event_val = 1.0; // toggle fall signal and send
-        send_values_serial();
+        send_values();
         cv.fall_event_val = 0.0;
 
         // check if stationary post fall
@@ -518,7 +488,7 @@ void loop() {
 
     if(fall_state == STATIONARY_POST_FALL) {
         Serial.println("IN STATIONARY_POST_FALL");
-        send_values_serial();
+        send_values();
         update_buffer(BUF_SMALL);
         // stay in this state if still unmoving
         if(check_stationary()) {
@@ -532,7 +502,7 @@ void loop() {
     }
 
     if(fall_state == WALKING || fall_state == RUNNING) {
-        send_values_serial();
+        send_values();
 
         // probably stay ready to detect fall
         if(cv.A_SVM <= IDLE_TRIGGER) {
@@ -570,7 +540,7 @@ void loop() {
 
     if(fall_state == JUMPING_OR_QUICK_SIT) {
         Serial.println("IN JUMPING_OR_QUICK_SIT");
-        send_values_serial();
+        send_values();
         fall_state = IDLE_FALL;
     }
 
