@@ -1,6 +1,6 @@
 % Test code for checking out the collected data
 
-T0 = readtable('./data_collection_2_harry/harry_falling_left_0.csv');
+T0 = readtable('./full_fsm_serial_test_1_lilly/lilly_test.csv');
 
 dataCols = setdiff(T0.Properties.VariableNames, {'timestamp','label'});
 D0 = T0{:, dataCols};          % numeric data only

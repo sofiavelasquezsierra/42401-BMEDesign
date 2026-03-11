@@ -10,7 +10,7 @@ import serial
 SERIAL_PORT = "COM8"
 BAUD_RATE = 115200
 
-OUTPUT_FILE = "./serial_data_test/lilly_walking_2.csv"
+OUTPUT_FILE = "./full_fsm_serial_100Hz_1_lilly/lilly_fall_forward_1.csv"
 
 
 def parse_line(line: str) -> Optional[Tuple[float, float, float, float, float, float, float, float, int, float, str]]:

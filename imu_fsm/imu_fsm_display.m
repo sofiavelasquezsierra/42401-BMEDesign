@@ -1,7 +1,7 @@
 % Test code for checking out the collected data
 set(groot, 'defaultTextInterpreter', 'None');
 
-file_name = './serial_data_test/lilly_walking_2.csv';
+file_name = './full_fsm_serial_100Hz_1_lilly/lilly_fall_forward_0.csv';
 T0 = readtable(file_name);
 dataCols = T0.Properties.VariableNames( ...
     varfun(@isnumeric, T0, 'OutputFormat','uniform') ...
@@ -47,7 +47,7 @@ hold off;
 %%
 BUF_SIZE = 200;
 G = 9.81;
-IDLE_TRIGGER = 0.8;
+IDLE_TRIGGER = 0.85;
 CHECK_TRIGGER = 1.4;
 DEV_BUFFER_SIZE = 50;
 ACCEL_DEV_TRIGGER = 0.2;

@@ -1,6 +1,7 @@
 #include "LSM6DS3.h"
 #include "Wire.h"
 #include <bluefruit.h>
+#include <math.h>
 
 
 // constants
@@ -9,11 +10,13 @@ const float RAD_TO_DEG_CONV = 57.295779;
 
 // macros
 
-#define LOOP_DELAY 25
+// should run at 100Hz
+#define LOOP_DELAY 10 
+
 // These values are inspired by the paper
 #define BUF_SIZE 200
 #define BUF_SMALL 100
-#define IDLE_TRIGGER 0.75 // 0.8 in paper but that was slightly too lenient
+#define IDLE_TRIGGER 0.85 // 0.8 in paper but increased to allow for walk/run detection
 #define CHECK_TRIGGER 1.4
 
 // These values are inspired by the data
@@ -22,20 +25,19 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define DEV_BUFFER_SIZE 50 // same as paper
 
 // Thresholds for detecting walking or running
-#define ACCEL_DEV_WALKING 0.14 // from the data
-#define ACCEL_DEV_RUNNING 0.24 // totally made up, need to test
+#define ACCEL_DEV_WALKING 0.13 // from the data
+#define ACCEL_DEV_RUNNING 0.4 // from the data but need more trials
 #define WALKING_SPM_MIN 75
 #define RUNNING_SPM_MIN 150
-#define BUF_SMALL BUF_SIZE*0.5
-#define PEAK_BUF_SIZE BUF_SMALL*0.1
+#define PEAK_BUF_SIZE 10
 
 
 // straight comparison to 60 degrees in the paper
 #define TILT_TRIGGER_ANGLE 60
 // relative comparison
 #define TILT_TRIGGER 0.3
-#define INIT_TILT_SIZE 0.1*BUF_SIZE
-#define FINAL_TILT_SIZE 0.4*BUF_SIZE
+#define INIT_TILT_SIZE 20
+#define FINAL_TILT_SIZE 80
 #define STATIONARY_THRESHOLD 0.15
 
 
@@ -103,7 +105,7 @@ enum FALL_STATES {
     JUMPING_OR_QUICK_SIT = 8
 } fall_state;
 
-String fall_state_strings[6] = {"IDLE_FALL", "CHECK_FALL", "STABILIZE_FALL", "POSTURE_CHECK_FALL", "DETECTED_FALL", "STATIONARY_POST_FALL", "WALKING", "RUNNING", "JUMPING_OR_QUICK_SIT"};
+String fall_state_strings[9] = {"IDLE_FALL", "CHECK_FALL", "STABILIZE_FALL", "POSTURE_CHECK_FALL", "DETECTED_FALL", "STATIONARY_POST_FALL", "WALKING", "RUNNING", "JUMPING_OR_QUICK_SIT"};
 
 enum IMU_COMP {
     ACCEL = 0,
@@ -281,10 +283,12 @@ bool check_fall() {
     // reset update position
     update_pos = 0;
     for(int i = 0; i < BUF_SIZE; i++) {
-        update_values(1);
+        // update_values(1);
+        send_values_serial();
         if(cv.A_SVM >= CHECK_TRIGGER) {
             large_accel = true;
         }
+        delay(LOOP_DELAY); // delay since collecting samples
     }
     return large_accel;
 }
@@ -293,33 +297,37 @@ bool check_fall() {
 // If doesn't work, consider doing a comparison between earlier samples
 // and later samples to show stabilization
 float std_dev_check(IMU_COMP dev_type, int buffer_size) {
-    float sum = 0.0;
-    float std = 0.0;
+    float mean = 0.0;
     int start_idx = 0;
     int end_idx = 0;
     if(buffer_size == BUF_SIZE) {
         start_idx = BUF_SIZE - DEV_BUFFER_SIZE;
-        end_idx = BUF_SIZE:
+        end_idx = BUF_SIZE;
+        buffer_size = DEV_BUFFER_SIZE;
     }
     else {
         start_idx = 0;
         end_idx = buffer_size;
     }
     // naive implementation, optimize if lag is too bad
-    if(dev_type == ACCEL) {
-        for(int i = start_idx; i < end_idx; i++) {
-        sum = ((sum + asvm_buf[i])*(sum + asvm_buf[i]))/(buffer_size);
-        }
+    for(int i = start_idx; i < end_idx; i++) {
+        float val = (dev_type == ACCEL) ? asvm_buf[i] : gsvm_buf[i];
+        mean = mean + val;
     }
-    else {
-        for(int i = start_idx ; i < end_idx; i++) {
-        sum = ((sum + gsvm_buf[i])*(sum + gsvm_buf[i]))/(buffer_size);
-        }
+    
+    mean = mean/buffer_size;
+
+    float variance = 0.0;
+
+    for(int i = start_idx; i < end_idx; i++) {
+        float val = (dev_type == ACCEL) ? asvm_buf[i] : gsvm_buf[i];
+        variance = variance + (val - mean)*(val-mean);
+
     }
 
-    std = sqrt(sum);
-
-    return (std);
+    variance = variance/buffer_size;
+    
+    return sqrt(variance);
     
 }
 
@@ -332,11 +340,11 @@ bool posture_check() {
 
     // extremely naive implementation, optimize later
     for(int i = 0; i < INIT_TILT_SIZE; i++) {
-        hor_dist = sqrt(ax_buf[i]*ax_buf[i], az_buf[i]*az_buf[i]);
+        hor_dist = sqrt(ax_buf[i]*ax_buf[i] + az_buf[i]*az_buf[i]);
         tilt_init_sum += atan2(ay_buf[i], hor_dist);
     }
     for(int i = BUF_SIZE - FINAL_TILT_SIZE; i < BUF_SIZE; i++) {
-        hor_dist = sqrt(ax_buf[i]*ax_buf[i], az_buf[i]*az_buf[i]);
+        hor_dist = sqrt(ax_buf[i]*ax_buf[i] + az_buf[i]*az_buf[i]);
         tilt_final_sum += atan2(ay_buf[i], hor_dist);
     }
 
@@ -351,12 +359,13 @@ bool posture_check_angle() {
 
     // angle to the horizontal plane among last samples
     for(int i = BUF_SIZE - FINAL_TILT_SIZE; i < BUF_SIZE; i++) {
-        hor_dist = sqrt(ax_buf[i]*ax_buf[i], az_buf[i]*az_buf[i]);
+        hor_dist = sqrt(ax_buf[i]*ax_buf[i] + az_buf[i]*az_buf[i]);
         tilt_final_sum += atan2(ay_buf[i], hor_dist);
     }
 
-    float tilt_final_angle = abs(((tilt_final_sum*RAD_TO_DEG_CONV)/FINAL_TILT_SIZE))
+    float tilt_final_angle = fabs(((tilt_final_sum*RAD_TO_DEG_CONV)/FINAL_TILT_SIZE));
     Serial.print("Calculated angle: "); Serial.print(tilt_final_angle); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER_ANGLE);
+    cv.fall_event_val = tilt_final_angle;
     return (tilt_final_angle <= TILT_TRIGGER_ANGLE);
 }
 
@@ -424,6 +433,7 @@ void loop() {
         // Serial.println("IN IDLE_FALL");
         // update_values(1);
         send_values_serial();
+        cv.fall_event_val = 0.0;
         // right now this is just a instantaneous check but really should 
         // be some small running average
         if(cv.A_SVM <= IDLE_TRIGGER) {
@@ -437,8 +447,9 @@ void loop() {
     if(fall_state == CHECK_FALL) {
         send_values_serial();
         Serial.println("IN CHECK_FALL");
+        // collect buffer of samples and send
         if(check_fall()) {
-            fall_state = STABILIZE_ACCEL_FALL;
+            fall_state = STABILIZE_FALL;
         }
         else {
             fall_state = IDLE_FALL;
@@ -448,8 +459,10 @@ void loop() {
     if(fall_state == STABILIZE_FALL) {
         send_values_serial();
         Serial.println("IN STABLIZE_ACCEL_FALL");
+        // calculate standard deviations over the buffer
         float std_accel = std_dev_check(ACCEL, BUF_SIZE);
         float std_gyro = std_dev_check(GYRO, BUF_SIZE);
+        cv.fall_event_val = std_accel;
 
         // sufficiently stabilized
         if(std_accel <= ACCEL_DEV_THRESHOLD && std_gyro <= GYRO_DEV_THRESHOLD) {
@@ -464,7 +477,7 @@ void loop() {
         }
 
         // running threshold
-        else if(std_accel >= ACCEL_DEV_THRESHOLD) {
+        else if(std_accel >= ACCEL_DEV_RUNNING) {
             fall_state = RUNNING;
         }
 
@@ -553,7 +566,7 @@ void loop() {
                 }
             }
         }
-
+    }
 
     if(fall_state == JUMPING_OR_QUICK_SIT) {
         Serial.println("IN JUMPING_OR_QUICK_SIT");
