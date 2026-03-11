@@ -20,6 +20,12 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define GYRO_DEV_THRESHOLD 16.3 // 10 in the paper
 #define DEV_BUFFER_SIZE 50 // same as paper
 
+// Thresholds for detecting walking or running
+#define ACCEL_DEV_WALKING 0.14 // from the data
+#define ACCEL_DEV_RUNNING 0.24 // totally made up, need to test
+#define WALKING_SPM_MIN 75
+#define RUNNING_SPM_MIN 150
+
 // straight comparison to 60 degrees in the paper
 #define TILT_TRIGGER_ANGLE 60
 // relative comparison
@@ -27,6 +33,7 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define INIT_TILT_SIZE 0.1*BUF_SIZE
 #define FINAL_TILT_SIZE 0.4*BUF_SIZE
 #define STATIONARY_THRESHOLD 0.15
+
 
 // Note: the AY value is actually the "AZ" due to the orientation of the device lol
 
@@ -79,27 +86,20 @@ struct curr_vals_struct {
 
 curr_vals_struct cv = {0, 0, 0, 0, 0, 0, 0, 0, 0, false};
 
-// motion classifer states 
-enum MOTION_STATES {
-    IDLE = 0,
-    WALK = 1,
-    RUN = 2,
-    LYING = 3,
-    FALLEN = 4,
-    STANDING = 5
-} state;
-
+// motion classifer states, sorry for the bad naming
 enum FALL_STATES {
     IDLE_FALL = 0,
     CHECK_FALL = 1,
-    STABILIZE_ACCEL_FALL = 2,
-    STABILIZE_GYRO_FALL = 3,
-    POSTURE_CHECK_FALL = 4,
-    DETECTED_FALL = 5,
-    STATIONARY_POST_FALL = 6
+    STABILIZE_FALL = 2,
+    POSTURE_CHECK_FALL = 3,
+    DETECTED_FALL = 4,
+    STATIONARY_POST_FALL = 5,
+    WALKING = 6,
+    RUNNING = 7,
+    JUMPING_OR_QUICK_SIT = 8
 } fall_state;
 
-String fall_state_strings[6] = {"IDLE_FALL", "CHECK_FALL", "STABILIZE_ACCEL_FALL", "STABILIZE_GYRO_FALL", "POSTURE_CHECK_FALL", "DETECTED_FALL"};
+String fall_state_strings[6] = {"IDLE_FALL", "CHECK_FALL", "STABILIZE_FALL", "POSTURE_CHECK_FALL", "DETECTED_FALL", "STATIONARY_POST_FALL", "WALKING", "RUNNING", "JUMPING_OR_QUICK_SIT"};
 
 enum IMU_COMP {
     ACCEL = 0,
@@ -288,7 +288,7 @@ bool check_fall() {
 // Calculate stdev over the last DEV_BUFFER_SIZE samples of the buffer
 // If doesn't work, consider doing a comparison between earlier samples
 // and later samples to show stabilization
-bool std_dev_check(IMU_COMP dev_type, float threshold) {
+float std_dev_check(IMU_COMP dev_type) {
     float sum = 0.0;
     float std = 0.0;
     // naive implementation, optimize if lag is too bad
@@ -305,7 +305,7 @@ bool std_dev_check(IMU_COMP dev_type, float threshold) {
 
     std = sqrt(sum);
 
-    return (std >= threshold);
+    return (std);
     
 }
 
@@ -367,6 +367,15 @@ bool check_stationary() {
     stationary = (abs(avg_asvm - 1) <= STATIONARY_THRESHOLD);
     return stationary;
 }
+
+// calculate steps per minute over the window
+float check_cadence() {
+    float period = 0.0;
+
+    return period;
+}
+
+
 void setup() {
     Serial.begin(115200);
     while (!Serial);
@@ -418,28 +427,45 @@ void loop() {
         }
     }
 
-    if(fall_state == STABILIZE_ACCEL_FALL) {
+    if(fall_state == STABILIZE_FALL) {
         send_values_serial();
         Serial.println("IN STABLIZE_ACCEL_FALL");
-        if(std_dev_check(ACCEL, ACCEL_DEV_THRESHOLD)) {
-            fall_state = STABILIZE_GYRO_FALL;
-        }
+        float std_accel = std_dev_check(ACCEL);
+        float std_gyro = std_dev_check(GYRO);
 
-        else {
-            fall_state = IDLE_FALL;
-        }
-    }
-
-    if(fall_state == STABILIZE_GYRO_FALL) {
-        send_values_serial();
-        Serial.println("IN STABILIZE_GYRO_FALL");
-        if(std_dev_check(GYRO, GYRO_DEV_THRESHOLD)) {
+        // sufficiently stabilized
+        if(std_accel <= ACCEL_DEV_THRESHOLD && std_gyro <= GYRO_DEV_THRESHOLD) {
             fall_state = POSTURE_CHECK_FALL;
         }
+
+        // walking threshold, only care about the accel std
+        else if((std_accel >= ACCEL_DEV_WALKING) && 
+                (std_accel <= ACCEL_DEV_RUNNING))
+        {
+            fall_state = WALKING;
+        }
+
+        // running threshold
+        else if(std_accel >= ACCEL_DEV_THRESHOLD) {
+            fall_state = RUNNING;
+        }
+
+        // weird other movement I guess
         else {
             fall_state = IDLE_FALL;
         }
     }
+
+    // if(fall_state == STABILIZE_GYRO_FALL) {
+    //     send_values_serial();
+    //     Serial.println("IN STABILIZE_GYRO_FALL");
+    //     if(std_dev_check(GYRO, GYRO_DEV_THRESHOLD)) {
+    //         fall_state = POSTURE_CHECK_FALL;
+    //     }
+    //     else {
+    //         fall_state = IDLE_FALL;
+    //     }
+    // }
 
     if(fall_state == POSTURE_CHECK_FALL) {
         send_values_serial();
@@ -448,7 +474,7 @@ void loop() {
             fall_state = DETECTED_FALL;
         }
         else {
-            fall_state = IDLE_FALL;
+            fall_state = JUMPING_OR_QUICK_SIT;
         }
     }
 
@@ -473,7 +499,7 @@ void loop() {
     if(fall_state == STATIONARY_POST_FALL) {
         Serial.println("IN STATIONARY_POST_FALL");
         send_values_serial();
-        update_buffer(1);
+        update_buffer();
         // stay in this state if still unmoving
         if(check_stationary()) {
             fall_state = STATIONARY_POST_FALL;
@@ -483,6 +509,50 @@ void loop() {
             initialize_values();
             fall_state = IDLE_FALL;
         }
+    }
+
+    if(fall_state == WALKING || fall_state == RUNNING) {
+        send_values_serial();
+
+        // probably stay ready to detect fall
+        if(cv.A_SVM <= IDLE_TRIGGER) {
+            fall_state = CHECK_FALL;
+        }
+
+        // generate a window of data to look at
+        else {
+            update_buffer();
+        }
+
+        // stabilized values, go back to idle
+        if(std_dev_check(ACCEL) <= ACCEL_DEV_THRESHOLD) {
+            fall_state = IDLE_FALL;
+        }
+
+        // moving somehow
+        else {
+            float spm = check_cadence();
+            // walking range
+            if(spm <= RUNNING_SPM_MIN && spm >= WALKING_SPM_MIN) {
+                fall_state = WALKING;
+            }
+            // running range
+            else if(spm >= RUNNING_SPM_MIN) {
+                fall_state = RUNNING;
+            }
+            
+            // something else??
+            else {
+                fall_state = IDLE_FALL;
+            }
+        }
+    }
+
+
+    if(fall_state == JUMPING_OR_QUICK_SIT) {
+        Serial.println("IN JUMPING_OR_QUICK_SIT");
+        send_values_serial();
+        fall_state = IDLE_FALL;
     }
 
     delay(LOOP_DELAY);
