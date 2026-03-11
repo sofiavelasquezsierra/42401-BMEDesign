@@ -113,7 +113,7 @@ enum IMU_COMP {
     GYRO = 1
 } imu_comp;
 
-
+// reset stuff to 0s
 void initialize_values() {
     fall_state = IDLE_FALL;
     cv.A_SVM = 0.0;
@@ -122,6 +122,7 @@ void initialize_values() {
     avg_valid = false;
 }
 
+// update values in the buffers
 void update_values(bool update_buffers) {
     // read from the IMU
     cv.ax = myIMU.readFloatAccelX() - cal_ax;
@@ -165,6 +166,7 @@ void update_values(bool update_buffers) {
     
 }
 
+// for debugging
 void print_values() {
     Serial.print("AX: "); Serial.print(cv.ax); Serial.print(", ");
     Serial.print("AY: "); Serial.print(cv.ay); Serial.print(", ");
@@ -181,9 +183,9 @@ void print_values() {
     Serial.print("STATE: "); Serial.println(fall_state);
 }
 
-// TODO: send only critical values over BLE:
+// Send only critical values over BLE:
 // MCU_time, fall_state if in {DETECTED_FALL, STATIONARY_POST_FALL, 
-// WALKING, RUNNING, JUMPING_OR_QUICK_SIT}, fall impact in Gs (add later)
+// WALKING, RUNNING, JUMPING_OR_QUICK_SIT}, fall impact in Gs
 void send_values_BLE() {
     update_values(1);
 
@@ -200,6 +202,7 @@ void send_values_BLE() {
     bleuart.print(buffer);
 }
 
+// send values over serial - use for testing to send all data points to analyze
 void send_values_serial() {
 
     update_values(1);
@@ -233,6 +236,7 @@ void send_values_serial() {
     Serial.println(fall_state_strings[fall_state]);
 }
 
+// send values over BLE or serial
 void send_values() {
     if(USE_BLE) {
         send_values_BLE();
@@ -303,7 +307,8 @@ float std_dev_check(IMU_COMP dev_type, int buffer_size) {
     
 }
 
-// really just a angle percent difference check
+// really just a angle percent difference check, get rid of if
+// posture_check_angle works sufficiently well
 bool posture_check() {
     float tilt_diff = 0.0;
     float tilt_init_sum = 0.0;
@@ -320,11 +325,12 @@ bool posture_check() {
         tilt_final_sum += atan2(ay_buf[i], hor_dist);
     }
 
-    tilt_diff = (abs((tilt_final_sum/FINAL_TILT_SIZE) - (tilt_init_sum/INIT_TILT_SIZE)))/(tilt_init_sum);
+    tilt_diff = (fabs((tilt_final_sum/FINAL_TILT_SIZE) - (tilt_init_sum/INIT_TILT_SIZE)))/(tilt_init_sum);
     Serial.print("Calculated angle: "); Serial.print(tilt_diff); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER);
     return (tilt_diff >= TILT_TRIGGER);
 }
 
+// calculates difference in orientation between beginning and end of the sample
 bool posture_check_angle() {
     float tilt_final_sum = 0.0;
     float hor_dist = 0.0;
@@ -341,6 +347,8 @@ bool posture_check_angle() {
     return (tilt_final_angle <= TILT_TRIGGER_ANGLE);
 }
 
+// basically the same as update_values(1) but only updates the buffers
+// until a certain buffer_size
 void update_buffer(int buffer_size) {
     // reset update position
     update_pos = 0;
@@ -350,6 +358,7 @@ void update_buffer(int buffer_size) {
     return;
 }
 
+// check if person is stationary (low ASVM)
 bool check_stationary() {
     bool stationary = false;
     float sum = 0.0;
@@ -369,6 +378,7 @@ float check_cadence() {
     float peak[PEAK_BUF_SIZE];
     float ts[PEAK_BUF_SIZE];
 
+    // TODO!!!
     // find peaks
     // average peak to take out local 
     return period;
@@ -400,8 +410,7 @@ void setup() {
 // FSM style motion detection
 void loop() {
     if(fall_state == IDLE_FALL) {
-        // Serial.println("IN IDLE_FALL");
-        // update_values(1);
+        Serial.println("IN IDLE_FALL");
         send_values();
         cv.fall_event_val = 0.0;
         // right now this is just a instantaneous check but really should 
