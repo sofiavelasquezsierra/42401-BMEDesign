@@ -12,6 +12,7 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define LOOP_DELAY 25
 // These values are inspired by the paper
 #define BUF_SIZE 200
+#define BUF_SMALL 100
 #define IDLE_TRIGGER 0.75 // 0.8 in paper but that was slightly too lenient
 #define CHECK_TRIGGER 1.4
 
@@ -25,6 +26,9 @@ const float RAD_TO_DEG_CONV = 57.295779;
 #define ACCEL_DEV_RUNNING 0.24 // totally made up, need to test
 #define WALKING_SPM_MIN 75
 #define RUNNING_SPM_MIN 150
+#define BUF_SMALL BUF_SIZE*0.5
+#define PEAK_BUF_SIZE BUF_SMALL*0.1
+
 
 // straight comparison to 60 degrees in the paper
 #define TILT_TRIGGER_ANGLE 60
@@ -288,18 +292,28 @@ bool check_fall() {
 // Calculate stdev over the last DEV_BUFFER_SIZE samples of the buffer
 // If doesn't work, consider doing a comparison between earlier samples
 // and later samples to show stabilization
-float std_dev_check(IMU_COMP dev_type) {
+float std_dev_check(IMU_COMP dev_type, int buffer_size) {
     float sum = 0.0;
     float std = 0.0;
+    int start_idx = 0;
+    int end_idx = 0;
+    if(buffer_size == BUF_SIZE) {
+        start_idx = BUF_SIZE - DEV_BUFFER_SIZE;
+        end_idx = BUF_SIZE:
+    }
+    else {
+        start_idx = 0;
+        end_idx = buffer_size;
+    }
     // naive implementation, optimize if lag is too bad
     if(dev_type == ACCEL) {
-        for(int i = BUF_SIZE - DEV_BUFFER_SIZE; i < BUF_SIZE; i++) {
-        sum = ((sum + asvm_buf[i])*(sum + asvm_buf[i]))/(BUF_SIZE);
+        for(int i = start_idx; i < end_idx; i++) {
+        sum = ((sum + asvm_buf[i])*(sum + asvm_buf[i]))/(buffer_size);
         }
     }
     else {
-        for(int i = BUF_SIZE - DEV_BUFFER_SIZE ; i < BUF_SIZE; i++) {
-        sum = ((sum + gsvm_buf[i])*(sum + gsvm_buf[i]))/(BUF_SIZE);
+        for(int i = start_idx ; i < end_idx; i++) {
+        sum = ((sum + gsvm_buf[i])*(sum + gsvm_buf[i]))/(buffer_size);
         }
     }
 
@@ -346,10 +360,10 @@ bool posture_check_angle() {
     return (tilt_final_angle <= TILT_TRIGGER_ANGLE);
 }
 
-void update_buffer() {
+void update_buffer(int buffer_size) {
     // reset update position
     update_pos = 0;
-    for(int i = 0; i < BUF_SIZE; i++) {
+    for(int i = 0; i < buffer_size; i++) {
         update_values(1);
     }
     return;
@@ -358,11 +372,11 @@ void update_buffer() {
 bool check_stationary() {
     bool stationary = false;
     float sum = 0.0;
-    for(int i = 0; i < BUF_SIZE; i++) {
+    for(int i = 0; i < BUF_SMALL; i++) {
         sum = sum + asvm_buf[i];
     }
 
-    float avg_asvm = sum / BUF_SIZE;
+    float avg_asvm = sum / BUF_SMALL;
     // ASVM = 1 when stationary
     stationary = (abs(avg_asvm - 1) <= STATIONARY_THRESHOLD);
     return stationary;
@@ -371,7 +385,11 @@ bool check_stationary() {
 // calculate steps per minute over the window
 float check_cadence() {
     float period = 0.0;
+    float peak[PEAK_BUF_SIZE];
+    float ts[PEAK_BUF_SIZE];
 
+    // find peaks
+    // average peak to take out local 
     return period;
 }
 
@@ -430,8 +448,8 @@ void loop() {
     if(fall_state == STABILIZE_FALL) {
         send_values_serial();
         Serial.println("IN STABLIZE_ACCEL_FALL");
-        float std_accel = std_dev_check(ACCEL);
-        float std_gyro = std_dev_check(GYRO);
+        float std_accel = std_dev_check(ACCEL, BUF_SIZE);
+        float std_gyro = std_dev_check(GYRO, BUF_SIZE);
 
         // sufficiently stabilized
         if(std_accel <= ACCEL_DEV_THRESHOLD && std_gyro <= GYRO_DEV_THRESHOLD) {
@@ -456,17 +474,6 @@ void loop() {
         }
     }
 
-    // if(fall_state == STABILIZE_GYRO_FALL) {
-    //     send_values_serial();
-    //     Serial.println("IN STABILIZE_GYRO_FALL");
-    //     if(std_dev_check(GYRO, GYRO_DEV_THRESHOLD)) {
-    //         fall_state = POSTURE_CHECK_FALL;
-    //     }
-    //     else {
-    //         fall_state = IDLE_FALL;
-    //     }
-    // }
-
     if(fall_state == POSTURE_CHECK_FALL) {
         send_values_serial();
         Serial.println("IN POSTURE_CHECK_FALL");
@@ -485,7 +492,7 @@ void loop() {
         cv.fall_event_val = 0.0;
 
         // check if stationary post fall
-        update_buffer();
+        update_buffer(BUF_SMALL);
         if(check_stationary()) {
             fall_state = STATIONARY_POST_FALL;
         }
@@ -499,7 +506,7 @@ void loop() {
     if(fall_state == STATIONARY_POST_FALL) {
         Serial.println("IN STATIONARY_POST_FALL");
         send_values_serial();
-        update_buffer();
+        update_buffer(BUF_SMALL);
         // stay in this state if still unmoving
         if(check_stationary()) {
             fall_state = STATIONARY_POST_FALL;
@@ -519,34 +526,33 @@ void loop() {
             fall_state = CHECK_FALL;
         }
 
-        // generate a window of data to look at
+        // generate a small window of data to look at and analyze
         else {
-            update_buffer();
-        }
+            update_buffer(BUF_SMALL);
 
-        // stabilized values, go back to idle
-        if(std_dev_check(ACCEL) <= ACCEL_DEV_THRESHOLD) {
-            fall_state = IDLE_FALL;
-        }
-
-        // moving somehow
-        else {
-            float spm = check_cadence();
-            // walking range
-            if(spm <= RUNNING_SPM_MIN && spm >= WALKING_SPM_MIN) {
-                fall_state = WALKING;
-            }
-            // running range
-            else if(spm >= RUNNING_SPM_MIN) {
-                fall_state = RUNNING;
-            }
-            
-            // something else??
-            else {
+            // stabilized values, go back to idle
+            if(std_dev_check(ACCEL, BUF_SMALL) <= ACCEL_DEV_THRESHOLD) {
                 fall_state = IDLE_FALL;
             }
+
+            // moving somehow
+            else {
+                float spm = check_cadence();
+                // walking range
+                if(spm <= RUNNING_SPM_MIN && spm >= WALKING_SPM_MIN) {
+                    fall_state = WALKING;
+                }
+                // running range
+                else if(spm >= RUNNING_SPM_MIN) {
+                    fall_state = RUNNING;
+                }
+                
+                // something else??
+                else {
+                    fall_state = IDLE_FALL;
+                }
+            }
         }
-    }
 
 
     if(fall_state == JUMPING_OR_QUICK_SIT) {
