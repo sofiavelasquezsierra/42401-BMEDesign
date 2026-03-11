@@ -1,4 +1,4 @@
-Generally going off of this paper for the fall detection: 
+Generally going off of this paper for the fall detection, but I'm extending it with additional checks for walking/running/jumping/quickly sitting down:
 https://pmc.ncbi.nlm.nih.gov/articles/PMC12196599/#sec4-sensors-25-03632
 - FSM = finite state machine, basically an algorithm where you move from state to state based on if the current data coming in from the sensors or other stats calculated from the data is above/below various thresholds
 
