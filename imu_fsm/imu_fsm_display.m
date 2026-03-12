@@ -1,7 +1,7 @@
 % Test code for checking out the collected data
 set(groot, 'defaultTextInterpreter', 'None');
 
-file_name = './full_fsm_serial_100Hz_1_lilly/lilly_fall_forward_0.csv';
+file_name = './fsm_test_shanaya/quick_sit_0.csv';
 T0 = readtable(file_name);
 dataCols = T0.Properties.VariableNames( ...
     varfun(@isnumeric, T0, 'OutputFormat','uniform') ...

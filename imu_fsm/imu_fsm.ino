@@ -259,8 +259,8 @@ bool check_fall() {
             large_accel = true;
         }
         // also update a maximum acceleration for later use
-        if(cv.ASVM >= max_accel) {
-            max_accel = cv.ASVM;
+        if(cv.A_SVM >= max_accel) {
+            max_accel = cv.A_SVM;
         }
         delay(LOOP_DELAY); // delay since collecting samples
     }
@@ -307,6 +307,7 @@ float std_dev_check(IMU_COMP dev_type, int buffer_size) {
     
 }
 
+// TODO: FIX THIS AND USE
 // really just a angle percent difference check, get rid of if
 // posture_check_angle works sufficiently well
 bool posture_check() {
@@ -330,6 +331,7 @@ bool posture_check() {
     return (tilt_diff >= TILT_TRIGGER);
 }
 
+// DOES NOT WORK
 // calculates difference in orientation between beginning and end of the sample
 bool posture_check_angle() {
     float tilt_final_sum = 0.0;
