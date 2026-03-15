@@ -1,7 +1,7 @@
 % Test code for checking out the collected data
 set(groot, 'defaultTextInterpreter', 'None');
 
-file_name = './fsm_test_shanaya/quick_sit_0.csv';
+file_name = './fsm_test_shanaya/fall_right_5.csv';
 T0 = readtable(file_name);
 dataCols = T0.Properties.VariableNames( ...
     varfun(@isnumeric, T0, 'OutputFormat','uniform') ...
@@ -53,12 +53,12 @@ DEV_BUFFER_SIZE = 50;
 ACCEL_DEV_TRIGGER = 0.2;
 GYRO_DEV_TRIGGER = 0.2;
 TILT_TRIGGER = 0.3;
-INIT_TILT_SIZE = 0.1*BUF_SIZE;
-FINAL_TILT_SIZE = 0.4*BUF_SIZE;
+INIT_TILT_SIZE = 10;
+FINAL_TILT_SIZE = 60;
 
 idle_trigger = find(T0.ASVM <= IDLE_TRIGGER, 1, 'first')
 check_trigger_idx = find(T0.ASVM(idle_trigger : end) >= CHECK_TRIGGER, 1, 'first');
-check_trigger = idle_trigger + check_trigger_idx
+check_trigger = idle_trigger + check_trigger_idx - 1;
 if(idle_trigger + BUF_SIZE > size(T0.ASVM, 1))
     end_idx = size(T0.ASVM, 1);
 else

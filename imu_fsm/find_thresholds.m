@@ -10,8 +10,8 @@ BUF_SIZE = 200;
 DEV_BUFFER_SIZE = 50;
 CHECK_TRIGGER = 1.4;
 IDLE_TRIGGER = 0.85;
-INIT_TILT_SIZE = 20;
-FINAL_TILT_SIZE = 80;
+INIT_TILT_SIZE = 10;
+FINAL_TILT_SIZE = 60;
 ACCEL_DEV_THRESHOLD = 0.06;
 GYRO_DEV_THRESHOLD = 16.3;
 TILT_TRIGGER_ANGLE = 60;
@@ -20,7 +20,6 @@ TILT_TRIGGER_RATIO = 0.3;
 set(groot, 'defaultTextInterpreter', 'none');        % titles, labels
 set(groot, 'defaultAxesTickLabelInterpreter', 'none'); % tick labels
 set(groot, 'defaultLegendInterpreter', 'none');     % legends
-set(groot, 'defaultLineLineWidth', 3);
 
 %% ------------------------------------------------------------
 % Collect all CSV files first
@@ -55,6 +54,7 @@ results = struct();
 all_ASVM_STD  = [];
 all_GSVM_STD  = [];
 all_AVG_ANGLE = [];
+all_INIT_ANGLE = [];
 all_MAX_ASVM  = [];
 all_MIN_ASVM  = [];
 all_POST_ASVM = [];
@@ -80,6 +80,7 @@ for t = 1:length(tags)
     ASVM_STD   = nan(n,1);
     GSVM_STD   = nan(n,1);
     AVG_ANGLE  = nan(n,1);
+    INIT_ANGLE = nan(n,1);
     MAX_ASVM   = nan(n,1);
     MIN_ASVM   = nan(n,1);
     POST_ASVM  = nan(n,1);
@@ -105,16 +106,19 @@ for t = 1:length(tags)
         if isempty(idle_trigger)
             continue
         end
+        
+        end_idx = min(idle_trigger + BUF_SIZE, height(T0));
 
-        check_idx = find(T0.ASVM(idle_trigger:end) >= CHECK_TRIGGER,1,'first');
-
+        % make sure to only search within the buffer size
+        check_idx = find(T0.ASVM(idle_trigger:end_idx) >= CHECK_TRIGGER,1,'first');
+        disp(check_idx)
+        disp(tag_files{i})
         if isempty(check_idx)
             continue
         end
 
         check_trigger = idle_trigger + check_idx;
 
-        end_idx = min(idle_trigger + BUF_SIZE, height(T0));
 
         fall_idx = idle_trigger:end_idx;
 
@@ -130,15 +134,21 @@ for t = 1:length(tags)
         % ----------------------------------------------------
 
         % std deviation (last DEV_BUFFER_SIZE samples)
-        ASVM_STD(i) = std(fall_sample(end-DEV_BUFFER_SIZE:end));
-        GSVM_STD(i) = std(fall_sample_g(end-DEV_BUFFER_SIZE:end));
+        ASVM_STD(i) = std(fall_sample(end-DEV_BUFFER_SIZE + 1:end));
+        GSVM_STD(i) = std(fall_sample_g(end-DEV_BUFFER_SIZE + 1:end));
 
         % tilt angle
         xz_dist = sqrt(fall_ax.^2 + fall_az.^2);
         horiz_angle = atan2(fall_ay,xz_dist) * (180/pi);
 
-        AVG_ANGLE(i) = mean(horiz_angle(INIT_TILT_SIZE:FINAL_TILT_SIZE));
-
+        ang_bound = check_idx + 50;
+        if(ang_bound > 201)
+            ang_bound = 201;
+        end
+        AVG_ANGLE(i) = mean(horiz_angle(check_idx: ang_bound));
+        
+        INIT_ANGLE(i) = mean(horiz_angle(1:check_idx));
+    
         % min / max
         MAX_ASVM(i) = max(fall_sample);
         MIN_ASVM(i) = min(fall_sample);
@@ -163,6 +173,7 @@ for t = 1:length(tags)
     all_ASVM_STD  = [all_ASVM_STD;  ASVM_STD(valid)];
     all_GSVM_STD  = [all_GSVM_STD;  GSVM_STD(valid)];
     all_AVG_ANGLE = [all_AVG_ANGLE; AVG_ANGLE(valid)];
+    all_INIT_ANGLE = [all_INIT_ANGLE; INIT_ANGLE(valid)];
     all_MAX_ASVM  = [all_MAX_ASVM;  MAX_ASVM(valid)];
     all_MIN_ASVM  = [all_MIN_ASVM;  MIN_ASVM(valid)];
     all_POST_ASVM = [all_POST_ASVM; POST_ASVM(valid)];
@@ -174,19 +185,10 @@ for t = 1:length(tags)
     results.(tag).GSVM_STD  = mean(GSVM_STD(valid));
     results.(tag).AVG_ANGLE = mean(AVG_ANGLE(valid));
     results.(tag).MAX_ASVM  = mean(MAX_ASVM(valid));
+    results.(tag).INIT_ANGLE = mean(INIT_ANGLE(valid));
     results.(tag).MIN_ASVM  = mean(MIN_ASVM(valid));
     results.(tag).POST_ASVM = mean(POST_ASVM(valid));
     results.(tag).N = sum(valid);
-
-    % figure;
-    % hold on;
-    % subplot(2,1,1);
-    % n_arr = [1:length(ASVM_STD(valid))]';
-    % scatter(n_arr, ASVM_STD(valid));
-    % subplot(2,1,2);
-    % scatter(n_arr, GSVM_STD(valid));
-    % title("Distribution of ASVM_STD and GSVM_STD");
-    % hold off;
 
 end
 
@@ -221,45 +223,7 @@ ylabel("Angle")
 title("Post-event posture")
 legend('NumColumns', 2);
 
-%% Display bar chart of stats
-stats_names = ["ASVM_STD","GSVM_STD","AVG_ANGLE","MAX_ASVM","MIN_ASVM","POST_ASVM"];
-num_stats = length(stats_names);
-num_tags  = length(tags);
-
-% Preallocate
-means = zeros(num_tags, num_stats);
-stds  = zeros(num_tags, num_stats);
-
-for t = 1:num_tags
-    tag = tags(t);
-    
-    % Extract valid entries
-    mask = (group_labels == tag);
-    if sum(mask) == 0
-        continue
-    end
-    
-    means(t,1) = mean(all_ASVM_STD(mask));
-    stds(t,1)  = std(all_ASVM_STD(mask));
-    
-    means(t,2) = mean(all_GSVM_STD(mask));
-    stds(t,2)  = std(all_GSVM_STD(mask));
-    
-    means(t,3) = mean(all_AVG_ANGLE(mask));
-    stds(t,3)  = std(all_AVG_ANGLE(mask));
-    
-    means(t,4) = mean(all_MAX_ASVM(mask));
-    stds(t,4)  = std(all_MAX_ASVM(mask));
-    
-    means(t,5) = mean(all_MIN_ASVM(mask));
-    stds(t,5)  = std(all_MIN_ASVM(mask));
-    
-    means(t,6) = mean(all_POST_ASVM(mask));
-    stds(t,6)  = std(all_POST_ASVM(mask));
-end
-
 %% Plot grouped bar chart with error bars
-%% Prepare data
 stats_names = ["ASVM_STD","GSVM_STD","AVG_ANGLE","MAX_ASVM","MIN_ASVM","POST_ASVM"];
 num_stats = length(stats_names);
 num_tags  = length(tags);
@@ -291,39 +255,89 @@ for t = 1:num_tags
     
     means(t,6) = mean(all_POST_ASVM(mask));
     stds(t,6)  = std(all_POST_ASVM(mask));
+
+    means(t,7) = mean(all_INIT_ANGLE(mask));
+    stds(t,7)  = std(all_INIT_ANGLE(mask));
 end
 
 %% Plot each stat in its own subplot (3x2)
 figure;
 
-for s = 1:num_stats
+for s = 1:6
     subplot(2,3,s);
-    hb = bar(1:num_tags, means(:,s));
     hold on;
+
+    if s == 3
+        % Angle subplot (subplot position 3)
+        % 3 bars per tag: Init, Final, Diff
+        angle_means = zeros(num_tags,3);  % columns: Init, Final, Diff
+        angle_stds  = zeros(num_tags,3);
     
-    % Add error bars
-    errorbar(1:num_tags, means(:,s), stds(:,s), 'k.', 'LineWidth', 1);
+        for t = 1:num_tags
+            tag = tags(t);
+            mask = (group_labels == tag);
+            if sum(mask) == 0
+                continue
+            end
+            avg_init_vals  = all_INIT_ANGLE(mask);
+            avg_final_vals = all_AVG_ANGLE(mask);
+            diff_vals = abs(avg_final_vals) - abs(avg_init_vals);
+       
+            angle_means(t,1) = abs(mean(avg_init_vals));
+            angle_means(t,2) = abs(mean(avg_final_vals));
+            angle_means(t,3) = abs(mean(diff_vals));
+            if(tag == "fall")
+                fall_init = (avg_init_vals)'
+                fall_final = (avg_final_vals)'
+                fall_diff = (diff_vals)'
+            end
+            
+            angle_stds(t,1) = std(avg_init_vals);
+            angle_stds(t,2) = std(avg_final_vals);
+            angle_stds(t,3) = std(abs(avg_final_vals - avg_init_vals));
+        end
     
-    set(gca, 'XTick', 1:num_tags, 'XTickLabel', tags);
-    ylabel(stats_names(s));
-    title(stats_names(s) + " per tag");
-    if(stats_names(s) == "ASVM_STD")
-        yline(ACCEL_DEV_THRESHOLD, 'red');
+        hb = bar(1:num_tags, angle_means);  % grouped bars
+        % Get the X positions of each bar group for error bars
+        x = nan(num_tags,3);
+        for k = 1:3
+            x(:,k) = hb(k).XEndPoints;
+        end
+    
+        hold on
+        errorbar(x, angle_means, angle_stds, 'k.', 'LineWidth', 1);
+        
+        yline(TILT_TRIGGER_ANGLE, 'r', 'LineWidth', 1);
+        ylabel('Tilt Angle (deg)');
+        title('Angles per tag');
+        legend('INIT','FINAL','DIFF','Location','southeast');
+        set(gca, 'XTick', 1:num_tags, 'XTickLabel', tags);
+        grid on;
+        hold off;
+
+    else
+        % Other stats: 1 bar per tag
+        hb = bar(1:num_tags, means(:,s));
+        errorbar(1:num_tags, means(:,s), stds(:,s), 'k.', 'LineWidth', 1);
+        set(gca, 'XTick', 1:num_tags, 'XTickLabel', tags);
+        ylabel(stats_names(s));
+        title(stats_names(s) + " per tag");
+        
+        % optional thresholds
+        switch stats_names(s)
+            case "ASVM_STD"
+                yline(ACCEL_DEV_THRESHOLD, 'red', 'LineWidth', 1);
+            case "GSVM_STD"
+                yline(GYRO_DEV_THRESHOLD, 'red', 'LineWidth', 1);
+            case "MAX_ASVM"
+                yline(CHECK_TRIGGER, 'red', 'LineWidth', 1);
+            case "MIN_ASVM"
+                yline(IDLE_TRIGGER, 'red', 'LineWidth', 1);
+        end
+        grid on;
     end
-    if(stats_names(s) == "GSVM_STD")
-        yline(GYRO_DEV_THRESHOLD, 'red');
-    end
-    if(stats_names(s) == "MAX_ASVM")
-        yline(CHECK_TRIGGER, 'red');
-    end
-    if(stats_names(s) == "MIN_ASVM")
-        yline(IDLE_TRIGGER, 'red');
-    end
-    if(stats_names(s) == "AVG_ANGLE")
-        yline(TILT_TRIGGER_ANGLE, 'red');
-    end
-    grid on;
+
     hold off;
 end
 
-sgtitle('IMU Statistics per Event Tag');  % super title for the figure
+sgtitle('IMU Statistics per Event Tag');  % super title

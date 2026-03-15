@@ -36,8 +36,8 @@ const bool USE_BLE = false;
 #define TILT_TRIGGER_ANGLE 60
 // relative comparison
 #define TILT_TRIGGER 0.3
-#define INIT_TILT_SIZE 20
-#define FINAL_TILT_SIZE 80
+#define INIT_TILT_SIZE 10
+#define FINAL_TILT_SIZE 60
 #define STATIONARY_THRESHOLD 0.15
 
 
@@ -311,7 +311,6 @@ float std_dev_check(IMU_COMP dev_type, int buffer_size) {
 // really just a angle percent difference check, get rid of if
 // posture_check_angle works sufficiently well
 bool posture_check() {
-    float tilt_diff = 0.0;
     float tilt_init_sum = 0.0;
     float tilt_final_sum = 0.0;
     float hor_dist = 0.0;
@@ -326,7 +325,10 @@ bool posture_check() {
         tilt_final_sum += atan2(ay_buf[i], hor_dist);
     }
 
-    tilt_diff = (fabs((tilt_final_sum/FINAL_TILT_SIZE) - (tilt_init_sum/INIT_TILT_SIZE)))/(tilt_init_sum);
+    float avg_init = tilt_init_sum / INIT_TILT_SIZE;
+    float avg_final = tilt_final_sum / FINAL_TILT_SIZE;
+
+    float tilt_diff = (fabs(avg_final - avg_init)) / avg_init;
     Serial.print("Calculated angle: "); Serial.print(tilt_diff); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER);
     return (tilt_diff >= TILT_TRIGGER);
 }
@@ -471,7 +473,7 @@ void loop() {
     if(fall_state == POSTURE_CHECK_FALL) {
         send_values();
         Serial.println("IN POSTURE_CHECK_FALL");
-        if(posture_check_angle()) {
+        if(posture_check()) {
             fall_state = DETECTED_FALL;
         }
         else {
