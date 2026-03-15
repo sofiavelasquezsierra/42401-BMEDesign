@@ -328,7 +328,7 @@ bool posture_check() {
     float avg_init = tilt_init_sum / INIT_TILT_SIZE;
     float avg_final = tilt_final_sum / FINAL_TILT_SIZE;
 
-    float tilt_diff = (fabs(avg_final - avg_init)) / avg_init;
+    float tilt_diff = (fabs(avg_final - avg_init));
     Serial.print("Calculated angle: "); Serial.print(tilt_diff); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER);
     return (tilt_diff >= TILT_TRIGGER);
 }

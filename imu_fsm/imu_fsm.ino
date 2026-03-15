@@ -33,8 +33,8 @@ const bool USE_BLE = false;
 
 // straight comparison to 60 degrees in the paper
 #define TILT_TRIGGER_ANGLE 60
-// relative comparison
-#define TILT_TRIGGER 0.3
+// relative comparison, check if final - init angle is greater than the threshold
+#define TILT_TRIGGER 30
 #define INIT_TILT_SIZE 10
 #define FINAL_TILT_SIZE 60
 #define STATIONARY_THRESHOLD 0.15
@@ -96,7 +96,7 @@ curr_vals_struct cv = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false};
 enum FALL_STATES {
     IDLE_FALL = 0,
     CHECK_FALL = 1,
-    ANALYZE_FALL = 2,
+    ANALYZE_IMPACT = 2,
     DETECTED_FALL = 3,
     STATIONARY_POST_FALL = 4,
     WALKING = 5,
@@ -104,7 +104,7 @@ enum FALL_STATES {
     JUMPING_OR_QUICK_SIT = 7
 } fall_state;
 
-String fall_state_strings[9] = {"IDLE_FALL", "CHECK_FALL", "ANALYZE_FALL", "DETECTED_FALL", "STATIONARY_POST_FALL", "WALKING", "RUNNING", "JUMPING_OR_QUICK_SIT"};
+String fall_state_strings[9] = {"IDLE_FALL", "CHECK_FALL", "ANALYZE_IMPACT", "DETECTED_FALL", "STATIONARY_POST_FALL", "WALKING", "RUNNING", "JUMPING_OR_QUICK_SIT"};
 
 enum IMU_COMP {
     ACCEL = 0,
@@ -326,7 +326,7 @@ bool posture_check() {
     float avg_init = tilt_init_sum / INIT_TILT_SIZE;
     float avg_final = tilt_final_sum / FINAL_TILT_SIZE;
 
-    float tilt_diff = (fabs(avg_final - avg_init)) / avg_init;
+    float tilt_diff = (fabs(avg_final - avg_init));
     Serial.print("Calculated angle: "); Serial.print(tilt_diff); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER);
     return (tilt_diff >= TILT_TRIGGER);
 }
@@ -374,18 +374,6 @@ bool check_stationary() {
     return stationary;
 }
 
-// calculate steps per minute over the window
-float check_cadence() {
-    float period = 0.0;
-    float peak[PEAK_BUF_SIZE];
-    float ts[PEAK_BUF_SIZE];
-
-    // TODO!!!
-    // find peaks
-    // average peak to take out local 
-    return period;
-}
-
 
 void setup() {
     Serial.begin(115200);
@@ -430,7 +418,7 @@ void loop() {
         Serial.println("IN CHECK_FALL");
         // collect buffer of samples and send
         if(check_fall()) {
-            fall_state = ANALYZE_FALL;
+            fall_state = ANALYZE_IMPACT;
         }
         else {
             fall_state = IDLE_FALL;
@@ -438,9 +426,9 @@ void loop() {
     }
 
     // analyze values from the buffer to classify the motion
-    if(fall_state == ANALYZE_FALL) {
+    if(fall_state == ANALYZE_IMPACT) {
         send_values();
-        Serial.println("IN ANALYZE_FALL");
+        Serial.println("IN ANALYZE_IMPACT");
         float std_accel = std_dev_check(ACCEL, BUF_SIZE);
         float std_gyro = std_dev_check(GYRO, BUF_SIZE);
         bool fall_tilt_check = posture_check();
@@ -507,6 +495,7 @@ void loop() {
     }
 
     // walking and running is ok so just go back to IDLE
+    // Add limp detection here
     if(fall_state == WALKING || fall_state == RUNNING) {
         Serial.println("WALKING OR RUNNING");
         send_values();
