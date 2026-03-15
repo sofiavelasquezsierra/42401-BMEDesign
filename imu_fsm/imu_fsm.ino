@@ -27,7 +27,7 @@ const bool USE_BLE = false;
 #define ACCEL_DEV_WALKING 0.13
 #define ACCEL_DEV_RUNNING 0.9
 #define ASVM_RUN_WALK_THRESHOLD 3.459
-#define BUF_SMALL 100 // calculate these things over a smaller buffer to improve responsiveness
+#define BUF_SMALL 50 // calculate these things over a smaller buffer to improve responsiveness
 #define PEAK_BUF_SIZE 10
 
 
@@ -70,6 +70,8 @@ float asvm_buf[BUF_SIZE];
 float gsvm_buf[BUF_SIZE];
 
 int update_pos;
+int check_pos;
+int max_pos;
 bool avg_valid;
 
 float A_SVM_mean;
@@ -117,6 +119,8 @@ void initialize_values() {
     cv.A_SVM = 0.0;
     cv.G_SVM = 0.0;
     update_pos = 0;
+    check_pos = 0;
+    max_pos = 0;
     avg_valid = false;
 }
 
@@ -249,16 +253,22 @@ bool check_fall() {
     bool large_accel = false;
     // reset update position
     update_pos = 0;
+    check_pos = 0;
+    max_pos = 0;
     float max_accel = 0;
     for(int i = 0; i < BUF_SIZE; i++) {
         // update_values(1);
         send_values();
         if(cv.A_SVM >= CHECK_TRIGGER) {
             large_accel = true;
+            if(!large_accel) {
+                check_pos = i; // save index of first suprathreshold ASVM
+            }
         }
         // also update a maximum acceleration for later use
         if(cv.A_SVM >= max_accel) {
             max_accel = cv.A_SVM;
+            max_pos = i; // also save index of max accel value
         }
         delay(LOOP_DELAY); // delay since collecting samples
     }
@@ -305,48 +315,30 @@ float std_dev_check(IMU_COMP dev_type, int buffer_size) {
     
 }
 
-// TODO: FIX THIS AND USE
-// really just a angle percent difference check, get rid of if
-// posture_check_angle works sufficiently well
 bool posture_check() {
     float tilt_init_sum = 0.0;
     float tilt_final_sum = 0.0;
     float hor_dist = 0.0;
 
     // extremely naive implementation, optimize later
-    for(int i = 0; i < INIT_TILT_SIZE; i++) {
+    for(int i = 0; i < check_pos; i++) {
         hor_dist = sqrt(ax_buf[i]*ax_buf[i] + az_buf[i]*az_buf[i]);
         tilt_init_sum += atan2(ay_buf[i], hor_dist);
     }
-    for(int i = BUF_SIZE - FINAL_TILT_SIZE; i < BUF_SIZE; i++) {
+
+    int end_idx = min(BUF_SIZE, max_pos + BUF_SMALL);
+    
+    for(int i = max_pos; i < end_idx; i++) {
         hor_dist = sqrt(ax_buf[i]*ax_buf[i] + az_buf[i]*az_buf[i]);
         tilt_final_sum += atan2(ay_buf[i], hor_dist);
     }
 
-    float avg_init = tilt_init_sum / INIT_TILT_SIZE;
-    float avg_final = tilt_final_sum / FINAL_TILT_SIZE;
+    float avg_init = tilt_init_sum / (check_pos);
+    float avg_final = tilt_final_sum / (end_idx - max_pos);
 
     float tilt_diff = (fabs(avg_final - avg_init));
     Serial.print("Calculated angle: "); Serial.print(tilt_diff); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER);
     return (tilt_diff >= TILT_TRIGGER);
-}
-
-// DOES NOT WORK
-// calculates difference in orientation between beginning and end of the sample
-bool posture_check_angle() {
-    float tilt_final_sum = 0.0;
-    float hor_dist = 0.0;
-
-    // angle to the horizontal plane among last samples
-    for(int i = BUF_SIZE - FINAL_TILT_SIZE; i < BUF_SIZE; i++) {
-        hor_dist = sqrt(ax_buf[i]*ax_buf[i] + az_buf[i]*az_buf[i]);
-        tilt_final_sum += atan2(ay_buf[i], hor_dist);
-    }
-
-    float tilt_final_angle = fabs(((tilt_final_sum*RAD_TO_DEG_CONV)/FINAL_TILT_SIZE));
-    Serial.print("Calculated angle: "); Serial.print(tilt_final_angle); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER_ANGLE);
-    cv.fall_event_val = tilt_final_angle;
-    return (tilt_final_angle <= TILT_TRIGGER_ANGLE);
 }
 
 // basically the same as update_values(1) but only updates the buffers

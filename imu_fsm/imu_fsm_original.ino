@@ -28,7 +28,7 @@ const bool USE_BLE = false;
 #define ACCEL_DEV_RUNNING 0.4 // from the data but need more trials
 #define WALKING_SPM_MIN 75
 #define RUNNING_SPM_MIN 150
-#define BUF_SMALL 100 // calculate these things over a smaller buffer to improve responsiveness
+#define BUF_SMALL 50 // calculate these things over a smaller buffer to improve responsiveness
 #define PEAK_BUF_SIZE 10
 
 
