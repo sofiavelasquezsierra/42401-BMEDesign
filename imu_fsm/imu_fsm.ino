@@ -19,15 +19,14 @@ const bool USE_BLE = false;
 #define CHECK_TRIGGER 1.4
 
 // These values are inspired by the data
-#define ACCEL_DEV_THRESHOLD 0.06 // 0.1 in the paper
-#define GYRO_DEV_THRESHOLD 16.3 // 10 in the paper
+#define ACCEL_DEV_THRESHOLD 0.08 // 0.1 in the paper, 0.0845 max from data
+#define GYRO_DEV_THRESHOLD 17.1 // 10 in the paper, 17ish from data
 #define DEV_BUFFER_SIZE 50 // same as paper
 
-// Thresholds for detecting walking or running
-#define ACCEL_DEV_WALKING 0.13 // from the data
-#define ACCEL_DEV_RUNNING 0.4 // from the data but need more trials
-#define WALKING_SPM_MIN 75
-#define RUNNING_SPM_MIN 150
+// Thresholds for detecting walking or running, from the data
+#define ACCEL_DEV_WALKING 0.13
+#define ACCEL_DEV_RUNNING 0.9
+#define ASVM_RUN_WALK_THRESHOLD 3.459
 #define BUF_SMALL 100 // calculate these things over a smaller buffer to improve responsiveness
 #define PEAK_BUF_SIZE 10
 
@@ -447,20 +446,21 @@ void loop() {
         bool fall_tilt_check = posture_check();
         bool stabilized_dev =   (std_accel <= ACCEL_DEV_THRESHOLD) &&
                                 (std_accel <= GYRO_DEV_THRESHOLD);
-        bool walking_dev = (std_accel >= ACCEL_DEV_WALKING) &&
-                           (std_accel <= ACCEL_DEV_RUNNING);
-        bool running_dev = (std_accel >= ACCEL_DEV_RUNNING);
+        bool walking_dev =  (std_accel >= ACCEL_DEV_WALKING) &&
+                            (std_accel <= ACCEL_DEV_RUNNING);
+        bool running_dev =  (std_accel >= ACCEL_DEV_RUNNING);
+        bool running_accel = (cv.fall_impact >= ASVM_RUN_WALK_THRESHOLD);
         
         // Fall
         if(stabilized_dev && fall_tilt_check) {
             fall_state = DETECTED_FALL;
         }
         // Run
-        else if(running_dev && !fall_tilt_check) {
+        else if(running_dev && !fall_tilt_check && running_accel) {
             fall_state = RUNNING;
         }
         // Walk
-        else if(walking_dev && !fall_tilt_check) {
+        else if(walking_dev && !fall_tilt_check && !running_accel) {
             fall_state = WALKING;
         }
         // Jump or sit
