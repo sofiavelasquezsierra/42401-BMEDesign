@@ -203,9 +203,9 @@ title("Motion intensity")
 legend('NumColumns', 2);
 
 subplot(2,2,2)
-gscatter(all_ASVM_STD, all_AVG_ANGLE, group_labels)
+gscatter(all_ASVM_STD, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
 xlabel("ASVM STD")
-ylabel("Angle")
+ylabel("Angle Diff")
 title("Motion vs posture")
 legend('NumColumns', 2);
 
@@ -217,9 +217,9 @@ title("Impact strength")
 legend('NumColumns', 2);
 
 subplot(2,2,4)
-gscatter(all_POST_ASVM, all_AVG_ANGLE, group_labels)
+gscatter(all_POST_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
 xlabel("Post ASVM")
-ylabel("Angle")
+ylabel("Angle Diff")
 title("Post-event posture")
 legend('NumColumns', 2);
 
@@ -286,15 +286,10 @@ for s = 1:6
             angle_means(t,1) = abs(mean(avg_init_vals));
             angle_means(t,2) = abs(mean(avg_final_vals));
             angle_means(t,3) = abs(mean(diff_vals));
-            if(tag == "fall")
-                fall_init = (avg_init_vals)'
-                fall_final = (avg_final_vals)'
-                fall_diff = (diff_vals)'
-            end
             
             angle_stds(t,1) = std(avg_init_vals);
             angle_stds(t,2) = std(avg_final_vals);
-            angle_stds(t,3) = std(abs(avg_final_vals - avg_init_vals));
+            angle_stds(t,3) = std(diff_vals);
         end
     
         hb = bar(1:num_tags, angle_means);  % grouped bars

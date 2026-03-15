@@ -97,15 +97,16 @@ curr_vals_struct cv = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false};
 enum FALL_STATES {
     IDLE_FALL = 0,
     CHECK_FALL = 1,
-    ANALYZE_FALL = 2,
-    DETECTED_FALL = 3,
-    STATIONARY_POST_FALL = 4,
-    WALKING = 5,
-    RUNNING = 6,
-    JUMPING_OR_QUICK_SIT = 7
+    STABILIZE_FALL = 2,
+    POSTURE_CHECK_FALL = 3,
+    DETECTED_FALL = 4,
+    STATIONARY_POST_FALL = 5,
+    WALKING = 6,
+    RUNNING = 7,
+    JUMPING_OR_QUICK_SIT = 8
 } fall_state;
 
-String fall_state_strings[9] = {"IDLE_FALL", "CHECK_FALL", "ANALYZE_FALL", "DETECTED_FALL", "STATIONARY_POST_FALL", "WALKING", "RUNNING", "JUMPING_OR_QUICK_SIT"};
+String fall_state_strings[9] = {"IDLE_FALL", "CHECK_FALL", "STABILIZE_FALL", "POSTURE_CHECK_FALL", "DETECTED_FALL", "STATIONARY_POST_FALL", "WALKING", "RUNNING", "JUMPING_OR_QUICK_SIT"};
 
 enum IMU_COMP {
     ACCEL = 0,
@@ -431,45 +432,52 @@ void loop() {
         Serial.println("IN CHECK_FALL");
         // collect buffer of samples and send
         if(check_fall()) {
-            fall_state = ANALYZE_FALL;
+            fall_state = STABILIZE_FALL;
         }
         else {
             fall_state = IDLE_FALL;
         }
     }
 
-    // analyze values from the buffer to classify the motion
-    if(fall_state == ANALYZE_FALL) {
+    if(fall_state == STABILIZE_FALL) {
         send_values();
-        Serial.println("IN ANALYZE_FALL");
+        Serial.println("IN STABLIZE_ACCEL_FALL");
+        // calculate standard deviations over the buffer
         float std_accel = std_dev_check(ACCEL, BUF_SIZE);
         float std_gyro = std_dev_check(GYRO, BUF_SIZE);
-        bool fall_tilt_check = posture_check();
-        bool stabilized_dev =   (std_accel <= ACCEL_DEV_THRESHOLD) &&
-                                (std_accel <= GYRO_DEV_THRESHOLD);
-        bool walking_dev = (std_accel >= ACCEL_DEV_WALKING) &&
-                           (std_accel <= ACCEL_DEV_RUNNING);
-        bool running_dev = (std_accel >= ACCEL_DEV_RUNNING);
-        
-        // Fall
-        if(stabilized_dev && fall_tilt_check) {
-            fall_state = DETECTED_FALL;
+        cv.fall_event_val = std_accel;
+
+        // sufficiently stabilized
+        if(std_accel <= ACCEL_DEV_THRESHOLD && std_gyro <= GYRO_DEV_THRESHOLD) {
+            fall_state = POSTURE_CHECK_FALL;
         }
-        // Run
-        else if(running_dev && !fall_tilt_check) {
-            fall_state = RUNNING;
-        }
-        // Walk
-        else if(walking_dev && !fall_tilt_check) {
+
+        // walking threshold, only care about the accel std
+        else if((std_accel >= ACCEL_DEV_WALKING) && 
+                (std_accel <= ACCEL_DEV_RUNNING))
+        {
             fall_state = WALKING;
         }
-        // Jump or sit
-        else if(stabilized_dev && !fall_tilt_check) {
-            fall_state = JUMPING_OR_QUICK_SIT;
+
+        // running threshold
+        else if(std_accel >= ACCEL_DEV_RUNNING) {
+            fall_state = RUNNING;
         }
-        // Something else??
+
+        // weird other movement I guess
         else {
             fall_state = IDLE_FALL;
+        }
+    }
+
+    if(fall_state == POSTURE_CHECK_FALL) {
+        send_values();
+        Serial.println("IN POSTURE_CHECK_FALL");
+        if(posture_check()) {
+            fall_state = DETECTED_FALL;
+        }
+        else {
+            fall_state = JUMPING_OR_QUICK_SIT;
         }
     }
 
@@ -499,21 +507,50 @@ void loop() {
         if(check_stationary()) {
             fall_state = STATIONARY_POST_FALL;
         }
-        // return to idle when moving again
+        // return to idle
         else {
             initialize_values();
             fall_state = IDLE_FALL;
         }
     }
 
-    // walking and running is ok so just go back to IDLE
     if(fall_state == WALKING || fall_state == RUNNING) {
-        Serial.println("WALKING OR RUNNING");
         send_values();
-        fall_state = IDLE_FALL;
+
+        // probably stay ready to detect fall
+        if(cv.A_SVM <= IDLE_TRIGGER) {
+            fall_state = CHECK_FALL;
+        }
+
+        // generate a small window of data to look at and analyze
+        else {
+            update_buffer(BUF_SMALL);
+
+            // stabilized values, go back to idle
+            if(std_dev_check(ACCEL, BUF_SMALL) <= ACCEL_DEV_THRESHOLD) {
+                fall_state = IDLE_FALL;
+            }
+
+            // moving somehow
+            else {
+                float spm = check_cadence();
+                // walking range
+                if(spm <= RUNNING_SPM_MIN && spm >= WALKING_SPM_MIN) {
+                    fall_state = WALKING;
+                }
+                // running range
+                else if(spm >= RUNNING_SPM_MIN) {
+                    fall_state = RUNNING;
+                }
+                
+                // something else??
+                else {
+                    fall_state = IDLE_FALL;
+                }
+            }
+        }
     }
 
-    // jumping and sitting is also ok
     if(fall_state == JUMPING_OR_QUICK_SIT) {
         Serial.println("IN JUMPING_OR_QUICK_SIT");
         send_values();
