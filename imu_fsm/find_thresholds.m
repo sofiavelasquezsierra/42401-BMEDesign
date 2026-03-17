@@ -199,28 +199,28 @@ subplot(2,2,1)
 gscatter(all_ASVM_STD, all_GSVM_STD, group_labels)
 xlabel("ASVM STD")
 ylabel("GSVM STD")
-title("Motion intensity")
+title("Stabilize period motion STDs")
 legend('NumColumns', 2);
 
 subplot(2,2,2)
 gscatter(all_ASVM_STD, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
 xlabel("ASVM STD")
 ylabel("Angle Diff")
-title("Motion vs posture")
+title("Stabilize ASVM STD vs angle delta")
 legend('NumColumns', 2);
 
 subplot(2,2,3)
 gscatter(all_ASVM_STD, all_MAX_ASVM, group_labels)
 xlabel("ASVM STD")
 ylabel("Max ASVM")
-title("Impact strength")
+title("Impact Magnitude and Stabilize ASVM STD")
 legend('NumColumns', 2);
 
 subplot(2,2,4)
 gscatter(all_POST_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
 xlabel("Post ASVM")
 ylabel("Angle Diff")
-title("Post-event posture")
+title("Angle Delta vs ASVM post impact")
 legend('NumColumns', 2);
 
 %% Plot grouped bar chart with error bars
@@ -281,11 +281,12 @@ for s = 1:6
             end
             avg_init_vals  = all_INIT_ANGLE(mask);
             avg_final_vals = all_AVG_ANGLE(mask);
-            diff_vals = abs(avg_final_vals) - abs(avg_init_vals);
-       
-            angle_means(t,1) = abs(mean(avg_init_vals));
-            angle_means(t,2) = abs(mean(avg_final_vals));
-            angle_means(t,3) = abs(mean(diff_vals));
+            % diff_vals = abs(avg_final_vals) - abs(avg_init_vals);
+            diff_vals = abs(avg_final_vals - avg_init_vals);
+            
+            angle_means(t,1) = mean(avg_init_vals);
+            angle_means(t,2) = mean(avg_final_vals);
+            angle_means(t,3) = mean(diff_vals);
             
             angle_stds(t,1) = std(avg_init_vals);
             angle_stds(t,2) = std(avg_final_vals);
