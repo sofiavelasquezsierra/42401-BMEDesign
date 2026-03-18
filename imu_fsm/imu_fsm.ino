@@ -30,13 +30,9 @@ const bool USE_BLE = false;
 #define BUF_SMALL 50 // calculate these things over a smaller buffer to improve responsiveness
 #define PEAK_BUF_SIZE 10
 
-
-// straight comparison to 60 degrees in the paper
-#define TILT_TRIGGER_ANGLE 60
 // relative comparison, check if final - init angle is greater than the threshold
 #define TILT_TRIGGER 30
-#define INIT_TILT_SIZE 10
-#define FINAL_TILT_SIZE 60
+
 #define STATIONARY_THRESHOLD 0.15
 
 
@@ -361,6 +357,7 @@ bool check_stationary() {
     }
 
     float avg_asvm = sum / BUF_SMALL;
+    cv.fall_event_val = avg_asvm;
     // ASVM = 1 when stationary
     stationary = (abs(avg_asvm - 1) <= STATIONARY_THRESHOLD);
     return stationary;
