@@ -3,6 +3,8 @@
 #include <bluefruit.h>
 #include <math.h>
 
+// DEBUGGING MACROS
+#define DEBUG_ANGLE 1
 
 // constants
 const float G = 9.81;
@@ -256,10 +258,10 @@ bool check_fall() {
         // update_values(1);
         send_values();
         if(cv.A_SVM >= CHECK_TRIGGER) {
-            large_accel = true;
             if(!large_accel) {
-                check_pos = i; // save index of first suprathreshold ASVM
+                check_pos = i; // save index of first suprathreshold ASVM only
             }
+            large_accel = true; // found at least one suprathreshold ASVM
         }
         // also update a maximum acceleration for later use
         if(cv.A_SVM >= max_accel) {
@@ -330,12 +332,18 @@ bool posture_check() {
         tilt_final_sum += atan2(ay_buf[i], hor_dist);
     }
 
-    float avg_init = tilt_init_sum / (check_pos);
-    Serial.print("******* init: "); Serial.println(avg_init);
-    Serial.print("******* check_pos: "); Serial.println(check_pos);
-    float avg_final = tilt_final_sum / (end_idx - max_pos);
-    Serial.print("******* final: "); Serial.println(avg_final);
-    Serial.print("******* end_idx - max_pos: "); Serial.println(end_idx - max_pos);
+    float avg_init = (RAD_TO_DEG_CONV*tilt_init_sum) / (check_pos);
+    float avg_final = (RAD_TO_DEG_CONV*tilt_final_sum) / (end_idx - max_pos);
+
+    if(DEBUG_ANGLE) {
+        Serial.print("******* init: "); Serial.println(avg_init);
+        Serial.print("******* final: "); Serial.println(avg_final);
+        Serial.print("******* check_pos: "); Serial.println(check_pos);
+        Serial.print("******* max_pos: "); Serial.println(max_pos);
+        Serial.print("******* max accel: "); Serial.println(cv.fall_impact);
+        Serial.print("******* end_idx: "); Serial.println(end_idx);
+        Serial.print("******* end_idx - max_pos: "); Serial.println(end_idx - max_pos);
+    }
 
     float tilt_diff = (fabs(avg_final - avg_init));
     cv.fall_event_val = tilt_diff;
@@ -395,7 +403,7 @@ void setup() {
 // FSM style motion detection
 void loop() {
     if(fall_state == IDLE_FALL) {
-        Serial.println("IN IDLE_FALL");
+        // Serial.println("IN IDLE_FALL");
         send_values();
         cv.fall_event_val = 0.0;
         // right now this is just a instantaneous check but really should 
