@@ -377,6 +377,16 @@ bool check_stationary() {
     return stationary;
 }
 
+// score based next_state generation instead of all-or-nothing logic
+// calculate event score based on closeness to each event's thresholds, lowest
+// score "wins" and is the classified event
+// if all scores are too high then go to IDLE
+int calculate_event() {
+    next_state = IDLE_FALL; // default
+    
+    return next_state;
+}
+
 
 void setup() {
     Serial.begin(115200);

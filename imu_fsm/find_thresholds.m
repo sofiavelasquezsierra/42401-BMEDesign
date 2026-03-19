@@ -57,6 +57,7 @@ all_INIT_ANGLE = [];
 all_MAX_ASVM  = [];
 all_MIN_ASVM  = [];
 all_POST_ASVM = [];
+all_REPORTED_EVENT = [];
 
 group_labels  = strings(0);
 
@@ -83,9 +84,9 @@ for t = 1:length(tags)
     MAX_ASVM   = nan(n,1);
     MIN_ASVM   = nan(n,1);
     POST_ASVM  = nan(n,1);
+    REPORTED_EVENT = strings(n,1);
 
     for i = 1:n
-
         T0 = readtable(tag_files{i});
 
         % remove duplicate rows
@@ -100,6 +101,9 @@ for t = 1:length(tags)
         % Detect event
         % ----------------------------------------------------
 
+        % get the reported event too
+        rep_event_idx = 1 + find(T0.FALL_STATE == "ANALYZE_IMPACT", 1, 'first')
+        % REPORTED_EVENT(i) = T0.FALL_STATE(rep_event_idx)
         idle_trigger = find(T0.ASVM <= IDLE_TRIGGER,1,'first');
 
         if isempty(idle_trigger)
@@ -117,7 +121,6 @@ for t = 1:length(tags)
         end
 
         check_trigger = idle_trigger + check_idx;
-
 
         fall_idx = idle_trigger:end_idx;
 
@@ -147,7 +150,7 @@ for t = 1:length(tags)
         AVG_ANGLE(i) = mean(horiz_angle(check_idx: ang_bound));
         
         INIT_ANGLE(i) = mean(horiz_angle(1:check_idx));
-    
+     
         % min / max
         MAX_ASVM(i) = max(fall_sample);
         MIN_ASVM(i) = min(fall_sample);
@@ -176,7 +179,8 @@ for t = 1:length(tags)
     all_MAX_ASVM  = [all_MAX_ASVM;  MAX_ASVM(valid)];
     all_MIN_ASVM  = [all_MIN_ASVM;  MIN_ASVM(valid)];
     all_POST_ASVM = [all_POST_ASVM; POST_ASVM(valid)];
-    
+    all_REPORTED_EVENT = [all_REPORTED_EVENT; REPORTED_EVENT(valid)];
+
     % Add labels for these samples
     group_labels  = [group_labels; repmat(tag,sum(valid),1)];
 
