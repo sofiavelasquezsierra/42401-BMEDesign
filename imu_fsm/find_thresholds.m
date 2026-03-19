@@ -1,6 +1,6 @@
 clear; clc;
 
-tags = ["fall","run","walk","jump","sit","squat"];
+tags = ["fall","run","walk","limp","jump","sit","squat"];
 
 folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "serial_data_test", "simp_fsm_test_iris"];
 
@@ -9,12 +9,9 @@ BUF_SIZE = 200;
 DEV_BUFFER_SIZE = 50;
 CHECK_TRIGGER = 1.4;
 IDLE_TRIGGER = 0.85;
-INIT_TILT_SIZE = 10;
-FINAL_TILT_SIZE = 60;
-ACCEL_DEV_THRESHOLD = 0.06;
-GYRO_DEV_THRESHOLD = 16.3;
+ACCEL_DEV_THRESHOLD = 0.08;
+GYRO_DEV_THRESHOLD = 17.1;
 TILT_TRIGGER_ANGLE = 60;
-TILT_TRIGGER_RATIO = 0.3;
 
 set(groot, 'defaultTextInterpreter', 'none');        % titles, labels
 set(groot, 'defaultAxesTickLabelInterpreter', 'none'); % tick labels
