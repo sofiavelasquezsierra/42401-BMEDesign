@@ -311,6 +311,7 @@ float std_dev_check(IMU_COMP dev_type, int buffer_size) {
     
 }
 
+// fix this so it stops returning NaN lol
 bool posture_check() {
     float tilt_init_sum = 0.0;
     float tilt_final_sum = 0.0;
@@ -330,9 +331,14 @@ bool posture_check() {
     }
 
     float avg_init = tilt_init_sum / (check_pos);
+    Serial.print("******* init: "); Serial.println(avg_init);
+    Serial.print("******* check_pos: "); Serial.println(check_pos);
     float avg_final = tilt_final_sum / (end_idx - max_pos);
+    Serial.print("******* final: "); Serial.println(avg_final);
+    Serial.print("******* end_idx - max_pos: "); Serial.println(end_idx - max_pos);
 
     float tilt_diff = (fabs(avg_final - avg_init));
+    cv.fall_event_val = tilt_diff;
     Serial.print("Calculated angle: "); Serial.print(tilt_diff); Serial.print(", TILT_TRIGGER: "); Serial.println(TILT_TRIGGER);
     return (tilt_diff >= TILT_TRIGGER);
 }
