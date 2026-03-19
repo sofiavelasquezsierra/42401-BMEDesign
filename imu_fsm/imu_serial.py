@@ -10,7 +10,7 @@ import serial
 SERIAL_PORT = "COM8"
 BAUD_RATE = 115200
 
-OUTPUT_FILE = "./fsm_test_shanaya/jumping_horizontal_single_1.csv"
+OUTPUT_FILE = "./simp_fsm_test_iris/jump_2.csv"
 
 
 def parse_line(line: str) -> Optional[Tuple[float, float, float, float, float, float, float, float, int, float, str]]:

@@ -2,8 +2,7 @@ clear; clc;
 
 tags = ["fall","run","walk","jump","sit","squat"];
 
-folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly",
-                     "full_fsm_serial_test_1_lilly", "serial_data_test"];
+folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "serial_data_test", "simp_fsm_test_iris"];
 
 % Constants
 BUF_SIZE = 200;
