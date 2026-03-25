@@ -1,7 +1,7 @@
 % Test code for checking out the collected data
 set(groot, 'defaultTextInterpreter', 'None');
 
-file_name = './simp_fsm_test_iris/walking_0.csv';
+file_name = './simp_fsm_test_iris/limp_left_injured_1.csv';
 T0 = readtable(file_name);
 dataCols = T0.Properties.VariableNames( ...
     varfun(@isnumeric, T0, 'OutputFormat','uniform') ...
@@ -11,7 +11,6 @@ idx = [true; any(diff(D0) ~= 0, 2)];
 
 T0 = T0(idx, :);
 ts0 = datetime(T0.timestamp, 'InputFormat', 'yyyy-MM-dd''T''HH:mm:ss.SSS');
-% time0  = seconds(T0.timestamp - T0.timestamp(1));
 time0 = zeros(1, length(ts0));
 
 for i = [2 : 1: length(ts0)]

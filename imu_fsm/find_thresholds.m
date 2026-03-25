@@ -2,8 +2,22 @@ clear; clc;
 
 tags = ["fall","run","walk","limp","jump","sit","squat"];
 
-folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "serial_data_test", "simp_fsm_test_iris"];
+% currently only looking at first samples of each csv file, not each distinct window
+% of data
+% all data that's sampled serially
+% folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "serial_data_test", "simp_fsm_test_iris"];
 
+% data that has event labels
+% folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "simp_fsm_test_iris"];
+
+% data with most updated thresholds being used - for perf checking
+% folders_to_search = ["simp_fsm_test", "fsm_test_shanaya"];
+
+% all serially sampled data, separated into event windows
+folders_to_search = ["separated_csv_files/fsm_test_shanaya_separated", "separated_csv_files/full_fsm_serial_100Hz_1_lilly_separated", "separated_csv_files/simp_fsm_test_iris_separated", "full_fsm_serial_test_1_lilly", "serial_data_test"];
+
+no_event_cnt = 0;
+event_file_paths = [];
 % Constants
 BUF_SIZE = 200;
 DEV_BUFFER_SIZE = 50;
@@ -84,26 +98,43 @@ for t = 1:length(tags)
     REPORTED_EVENT = strings(n,1);
 
     for i = 1:n
-        T0 = readtable(tag_files{i});
+        T0_init = readtable(tag_files{i});
 
         % remove duplicate rows
-        dataCols = T0.Properties.VariableNames( ...
-            varfun(@isnumeric,T0,'OutputFormat','uniform'));
+        dataCols = T0_init.Properties.VariableNames( ...
+            varfun(@isnumeric,T0_init,'OutputFormat','uniform'));
 
-        D0 = T0{:,dataCols};
+        D0 = T0_init{:,dataCols};
         idx = [true; any(diff(D0) ~= 0,2)];
-        T0 = T0(idx,:);
+        eventRows = ~strcmp(T0_init.FALL_STATE(2:end), T0_init.FALL_STATE(1:end-1)) | T0_init.FALL_EVENT(2:end) ~= T0_init.FALL_EVENT(1:end-1);
+        idx(2:end) = idx(2:end) | eventRows;
+        T0 = T0_init(idx,:);
 
         % ----------------------------------------------------
         % Detect event
         % ----------------------------------------------------
 
         % get the reported event too
-        rep_event_idx = 1 + find(T0.FALL_STATE == "ANALYZE_IMPACT", 1, 'first')
-        % REPORTED_EVENT(i) = T0.FALL_STATE(rep_event_idx)
+        rep_event_idx = 1 + find(((T0.FALL_STATE == "ANALYZE_IMPACT") | (T0.FALL_STATE == "STABILIZE_FALL")), 1, 'first')
+        if(rep_event_idx > length(T0.FALL_STATE))
+            disp("rep event idx out of bounds")
+            continue
+        end
+        if(isempty(rep_event_idx)) 
+            disp("!!!!!!!!!!!!!!NO REP EVENT IDX!!!!!!!!!")
+            no_event_cnt = no_event_cnt + 1;
+        else 
+            event = T0.FALL_STATE{rep_event_idx};
+            if(event == "POSTURE_CHECK_FALL")
+                disp("event is a fall or sit/jump");
+                rep_event_idx = rep_event_idx + 1; % make up for changes in imu logic
+            end
+            REPORTED_EVENT(i) = T0.FALL_STATE{rep_event_idx};
+        end
         idle_trigger = find(T0.ASVM <= IDLE_TRIGGER,1,'first');
 
         if isempty(idle_trigger)
+            disp("NO IDLE TRIGGER")
             continue
         end
         
@@ -177,7 +208,8 @@ for t = 1:length(tags)
     all_MIN_ASVM  = [all_MIN_ASVM;  MIN_ASVM(valid)];
     all_POST_ASVM = [all_POST_ASVM; POST_ASVM(valid)];
     all_REPORTED_EVENT = [all_REPORTED_EVENT; REPORTED_EVENT(valid)];
-
+    event_file_paths = [event_file_paths; tag_files(valid)'];
+    
     % Add labels for these samples
     group_labels  = [group_labels; repmat(tag,sum(valid),1)];
 
@@ -337,3 +369,7 @@ for s = 1:6
 end
 
 sgtitle('IMU Statistics per Event Tag');  % super title
+
+
+disp(no_event_cnt)
+EVENT_CLASSIFICATION_SUMMARY = [all_REPORTED_EVENT group_labels event_file_paths];
