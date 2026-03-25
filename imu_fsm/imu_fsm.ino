@@ -17,7 +17,7 @@ const bool USE_BLE = false;
 
 // These values are inspired by the paper
 #define BUF_SIZE 200
-#define IDLE_TRIGGER 0.85 // 0.8 in paper but increased to allow for walk/run detection
+#define IDLE_TRIGGER 0.8
 #define CHECK_TRIGGER 1.4
 
 // These values are inspired by the data
@@ -27,8 +27,8 @@ const bool USE_BLE = false;
 
 // Thresholds for detecting walking or running, from the data
 #define ACCEL_DEV_WALKING 0.13
-#define ACCEL_DEV_RUNNING 0.9
-#define ASVM_RUN_WALK_THRESHOLD 3.459
+#define ACCEL_DEV_RUNNING 0.702
+#define ASVM_RUN_WALK_THRESHOLD 2.6
 #define BUF_SMALL 50 // calculate these things over a smaller buffer to improve responsiveness
 #define PEAK_BUF_SIZE 10
 

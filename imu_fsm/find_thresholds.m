@@ -8,13 +8,13 @@ tags = ["fall","run","walk","limp","jump","sit","squat"];
 % folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "serial_data_test", "simp_fsm_test_iris"];
 
 % data that has event labels
-% folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "simp_fsm_test_iris"];
+% folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "simp_fsm_test_iris"];
 
-% data with most updated thresholds being used - for perf checking
-folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated", "separated_csv_files/fsm_test_shanaya_separated"];
+% data with most-ish updated thresholds being used - for perf checking
+% folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated", "separated_csv_files/fsm_test_shanaya_separated"];
 
-% all serially sampled data, separated into event windows
-% folders_to_search = ["separated_csv_files/fsm_test_shanaya_separated", "separated_csv_files/full_fsm_serial_100Hz_1_lilly_separated", "separated_csv_files/simp_fsm_test_iris_separated", "full_fsm_serial_test_1_lilly", "serial_data_test"];
+% all serially sampled data, separated into event windows - for determining event thresholds
+folders_to_search = ["separated_csv_files/fsm_test_shanaya_separated", "separated_csv_files/full_fsm_serial_100Hz_1_lilly_separated", "separated_csv_files/simp_fsm_test_iris_separated", "full_fsm_serial_test_1_lilly", "serial_data_test"];
 
 no_event_cnt = 0;
 event_file_paths = [];
@@ -25,7 +25,10 @@ CHECK_TRIGGER = 1.4;
 IDLE_TRIGGER = 0.85;
 ACCEL_DEV_THRESHOLD = 0.08;
 GYRO_DEV_THRESHOLD = 17.1;
-TILT_TRIGGER_ANGLE = 60;
+TILT_TRIGGER_ANGLE = 30;
+ACCEL_DEV_WALKING = 0.13;
+ACCEL_DEV_RUNNING = 0.9;
+ASVM_RUN_WALK_THRESHOLD = 3.459;
 
 set(groot, 'defaultTextInterpreter', 'none');        % titles, labels
 set(groot, 'defaultAxesTickLabelInterpreter', 'none'); % tick labels
@@ -355,10 +358,13 @@ for s = 1:6
         switch stats_names(s)
             case "ASVM_STD"
                 yline(ACCEL_DEV_THRESHOLD, 'red', 'LineWidth', 1);
+                yline(ACCEL_DEV_WALKING, 'red', 'LineWidth', 1);
+                yline(ACCEL_DEV_RUNNING, 'red', 'LineWidth', 1);
             case "GSVM_STD"
                 yline(GYRO_DEV_THRESHOLD, 'red', 'LineWidth', 1);
             case "MAX_ASVM"
                 yline(CHECK_TRIGGER, 'red', 'LineWidth', 1);
+                yline(ASVM_RUN_WALK_THRESHOLD, 'red', 'LineWidth', 1);
             case "MIN_ASVM"
                 yline(IDLE_TRIGGER, 'red', 'LineWidth', 1);
         end
