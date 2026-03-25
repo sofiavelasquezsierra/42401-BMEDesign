@@ -5,7 +5,9 @@ https://pmc.ncbi.nlm.nih.gov/articles/PMC12196599/#sec4-sensors-25-03632
 Key files:
 - imu_fsm.ino -> program the board (later will be merged with Kristina's ppg code)
 - imu_serial.py -> receive values over serial, for testing at 100Hz
-- imu_fsm_display.m -> visualize data and calculate stats as needed to tweak algorithm thresholds
+- imu_fsm_display.m -> visualize data and calculate stats as needed to tweak algorithm thresholds (FOR A SINGLE CSV FILE)
+- find_thresholds.m -> script to graph statistics across all csv files in specified folders, for finding more robust thresholds
+- split_csv_files.py -> split large csv files into individual event windows so more datapoints can be extracted from a single recording
 
 HOW TO TEST??
 1. Plug in device to computer since the testing should be done over serial (we want 100Hz data rate, less than that kind of sucks, and Bluetooth testing extremely sucks).
