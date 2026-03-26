@@ -142,11 +142,12 @@ for t = 1:length(tags)
         [peaks, index] = findpeaks(filtered_fall);
 
         %this for loop only uses the odd peaks from the filtered data
-        %(around 3-4)
+        %(lowkey looks better... aound 3-4 peaks detected per file)
+
         for t = 1:length(index)
             if mod(t,2) == 1
                 disp(t)
-                fall_time = [fall_time; T0.timestamp(index(t))];
+                fall_time = [fall_time; T0.MCU_TIME(index(t))];
             end
         end
         
@@ -163,12 +164,14 @@ for t = 1:length(tags)
 
         %calculating time between each fall
         fall_differences = [];
-        for r = 2:length(fall_time)
-            time_btwn_falls = seconds((fall_time(r) - fall_time(r-1)));
-            
+
+        % Sums up the MCU time difference between the current and previous
+        % index of fall
+        for r = 2:length(index)
+            time_btwn_falls = sum(T0.MCU_TIME(index(r-1):index(r)));
             fall_differences = [fall_differences, time_btwn_falls];
-            
         end
+
        
         fall_diff_avg(i) = mean(fall_differences);
         fall_diff_std(i) = std(fall_differences);
