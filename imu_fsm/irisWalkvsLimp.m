@@ -1,9 +1,9 @@
 clear; clc;
 
-%tags = ["walk","limp"];
-tags = ["limp"];
-%folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "serial_data_test", "simp_fsm_test_iris"];
-folders_to_search = ["simp_fsm_test_iris"];
+tags = ["walk","limp"];
+%tags = ["limp"];
+folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "serial_data_test", "simp_fsm_test_iris"];
+%folders_to_search = ["simp_fsm_test_iris"];
 % Constants
 BUF_SIZE = 200;
 DEV_BUFFER_SIZE = 50;
@@ -88,6 +88,7 @@ for t = 1:length(tags)
     fall_diff_avg = nan(n,1);
     fall_diff_std = nan(n,1);
     REPORTED_EVENT = strings(n,1);
+    fall_time = nan(n,1);
 
     for i = 1:n
         T0 = readtable(tag_files{i});
@@ -105,6 +106,7 @@ for t = 1:length(tags)
         % ----------------------------------------------------
     
         % get the reported event too
+        
         rep_event_idx = 1 + find(T0.FALL_STATE == "ANALYZE_IMPACT", 1, 'first')
         % REPORTED_EVENT(i) = T0.FALL_STATE(rep_event_idx)
         idle_trigger = find(T0.ASVM <= IDLE_TRIGGER,1,'first');
@@ -135,18 +137,35 @@ for t = 1:length(tags)
         fall_ay = T0.AY(fall_idx);
         fall_az = T0.AZ(fall_idx);
         
-        fall_time = T0.timestamp(fall_idx);
+        fall_time = [];
+        filtered_fall = lowpass(fall_sample, 0.01);
+        [peaks, index] = findpeaks(filtered_fall);
+
+        %this for loop only uses the odd peaks from the filtered data
+        %(around 3-4)
+        for t = 1:length(index)
+            if mod(t,2) == 1
+                disp(t)
+                fall_time = [fall_time; T0.timestamp(index(t))];
+            end
+        end
+        
+        %this one uses every peak (generally around 7)
+        % fall_time = T0.timestamp(index);
+ 
+            
         
 
-        all_FALL_TIMESTAMP = [all_FALL_TIMESTAMP; fall_time]
+        %all_FALL_TIMESTAMP = [all_FALL_TIMESTAMP; fall_time];
         % ----------------------------------------------------
         % Metrics
         % ----------------------------------------------------
 
         %calculating time between each fall
         fall_differences = [];
-        for r = 2:length(all_FALL_TIMESTAMP)
-            time_btwn_falls = seconds(all_FALL_TIMESTAMP(r) - all_FALL_TIMESTAMP(r-1));
+        for r = 2:length(fall_time)
+            time_btwn_falls = seconds((fall_time(r) - fall_time(r-1)));
+            
             fall_differences = [fall_differences, time_btwn_falls];
             
         end
@@ -223,153 +242,161 @@ for t = 1:length(tags)
 end
 
 %% Display correlation results
-figure
-
-subplot(2,2,1)
-gscatter(all_ASVM_STD, all_GSVM_STD, group_labels)
-xlabel("ASVM STD")
-ylabel("GSVM STD")
-title("Stabilize period motion STDs")
-legend('NumColumns', 2);
-
-subplot(2,2,2)
-gscatter(all_ASVM_STD, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
-xlabel("ASVM STD")
-ylabel("Angle Diff")
-title("Stabilize ASVM STD vs angle delta")
-legend('NumColumns', 2);
-
-subplot(2,2,3)
-gscatter(all_ASVM_STD, all_MAX_ASVM, group_labels)
-xlabel("ASVM STD")
-ylabel("Max ASVM")
-title("Impact Magnitude and Stabilize ASVM STD")
-legend('NumColumns', 2);
-
-subplot(2,2,4)
-gscatter(all_POST_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
-xlabel("Post ASVM")
-ylabel("Angle Diff")
-title("Angle Delta vs ASVM post impact")
-legend('NumColumns', 2);
-
-%% Plot grouped bar chart with error bars
-stats_names = ["ASVM_STD","GSVM_STD","AVG_ANGLE","MAX_ASVM","MIN_ASVM","POST_ASVM"];
-num_stats = length(stats_names);
-num_tags  = length(tags);
-
-means = zeros(num_tags, num_stats);
-stds  = zeros(num_tags, num_stats);
-
-for t = 1:num_tags
-    tag = tags(t);
-    mask = (group_labels == tag);
-    if sum(mask) == 0
-        continue
-    end
-    
-    means(t,1) = mean(all_ASVM_STD(mask));
-    stds(t,1)  = std(all_ASVM_STD(mask));
-    
-    means(t,2) = mean(all_GSVM_STD(mask));
-    stds(t,2)  = std(all_GSVM_STD(mask));
-    
-    means(t,3) = mean(all_AVG_ANGLE(mask));
-    stds(t,3)  = std(all_AVG_ANGLE(mask));
-    
-    means(t,4) = mean(all_MAX_ASVM(mask));
-    stds(t,4)  = std(all_MAX_ASVM(mask));
-    
-    means(t,5) = mean(all_MIN_ASVM(mask));
-    stds(t,5)  = std(all_MIN_ASVM(mask));
-    
-    means(t,6) = mean(all_POST_ASVM(mask));
-    stds(t,6)  = std(all_POST_ASVM(mask));
-
-    means(t,7) = mean(all_INIT_ANGLE(mask));
-    stds(t,7)  = std(all_INIT_ANGLE(mask));
-end
-
-%% Plot each stat in its own subplot (3x2)
-figure;
-
-for s = 1:6
-    subplot(2,3,s);
-    hold on;
-
-    if s == 3
-        % Angle subplot (subplot position 3)
-        % 3 bars per tag: Init, Final, Diff
-        angle_means = zeros(num_tags,3);  % columns: Init, Final, Diff
-        angle_stds  = zeros(num_tags,3);
-    
-        for t = 1:num_tags
-            tag = tags(t);
-            mask = (group_labels == tag);
-            if sum(mask) == 0
-                continue
-            end
-            avg_init_vals  = all_INIT_ANGLE(mask);
-            avg_final_vals = all_AVG_ANGLE(mask);
-            % diff_vals = abs(avg_final_vals) - abs(avg_init_vals);
-            diff_vals = abs(avg_final_vals - avg_init_vals);
-            
-            angle_means(t,1) = mean(avg_init_vals);
-            angle_means(t,2) = mean(avg_final_vals);
-            angle_means(t,3) = mean(diff_vals);
-            
-            angle_stds(t,1) = std(avg_init_vals);
-            angle_stds(t,2) = std(avg_final_vals);
-            angle_stds(t,3) = std(diff_vals);
-        end
-    
-        hb = bar(1:num_tags, angle_means);  % grouped bars
-        % Get the X positions of each bar group for error bars
-        x = nan(num_tags,3);
-        for k = 1:3
-            x(:,k) = hb(k).XEndPoints;
-        end
-    
-        hold on
-        errorbar(x, angle_means, angle_stds, 'k.', 'LineWidth', 1);
-        
-        yline(TILT_TRIGGER_ANGLE, 'r', 'LineWidth', 1);
-        ylabel('Tilt Angle (deg)');
-        title('Angles per tag');
-        legend('INIT','FINAL','DIFF','Location','southeast');
-        set(gca, 'XTick', 1:num_tags, 'XTickLabel', tags);
-        grid on;
-        hold off;
-
-    else
-        % Other stats: 1 bar per tag
-        hb = bar(1:num_tags, means(:,s));
-        errorbar(1:num_tags, means(:,s), stds(:,s), 'k.', 'LineWidth', 1);
-        set(gca, 'XTick', 1:num_tags, 'XTickLabel', tags);
-        ylabel(stats_names(s));
-        title(stats_names(s) + " per tag");
-        
-        % optional thresholds
-        switch stats_names(s)
-            case "ASVM_STD"
-                yline(ACCEL_DEV_THRESHOLD, 'red', 'LineWidth', 1);
-            case "GSVM_STD"
-                yline(GYRO_DEV_THRESHOLD, 'red', 'LineWidth', 1);
-            case "MAX_ASVM"
-                yline(CHECK_TRIGGER, 'red', 'LineWidth', 1);
-            case "MIN_ASVM"
-                yline(IDLE_TRIGGER, 'red', 'LineWidth', 1);
-        end
-        grid on;
-    end
-
-    hold off;
-end
-
-sgtitle('IMU Statistics per Event Tag');  % super title
+% figure
+% 
+% subplot(2,2,1)
+% gscatter(all_ASVM_STD, all_GSVM_STD, group_labels)
+% xlabel("ASVM STD")
+% ylabel("GSVM STD")
+% title("Stabilize period motion STDs")
+% legend('NumColumns', 2);
+% 
+% subplot(2,2,2)
+% gscatter(all_ASVM_STD, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
+% xlabel("ASVM STD")
+% ylabel("Angle Diff")
+% title("Stabilize ASVM STD vs angle delta")
+% legend('NumColumns', 2);
+% 
+% subplot(2,2,3)
+% gscatter(all_ASVM_STD, all_MAX_ASVM, group_labels)
+% xlabel("ASVM STD")
+% ylabel("Max ASVM")
+% title("Impact Magnitude and Stabilize ASVM STD")
+% legend('NumColumns', 2);
+% 
+% subplot(2,2,4)
+% gscatter(all_POST_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
+% xlabel("Post ASVM")
+% ylabel("Angle Diff")
+% title("Angle Delta vs ASVM post impact")
+% legend('NumColumns', 2);
+% 
+% %% Plot grouped bar chart with error bars
+% stats_names = ["ASVM_STD","GSVM_STD","AVG_ANGLE","MAX_ASVM","MIN_ASVM","POST_ASVM"];
+% num_stats = length(stats_names);
+% num_tags  = length(tags);
+% 
+% means = zeros(num_tags, num_stats);
+% stds  = zeros(num_tags, num_stats);
+% 
+% for t = 1:num_tags
+%     tag = tags(t);
+%     mask = (group_labels == tag);
+%     if sum(mask) == 0
+%         continue
+%     end
+% 
+%     means(t,1) = mean(all_ASVM_STD(mask));
+%     stds(t,1)  = std(all_ASVM_STD(mask));
+% 
+%     means(t,2) = mean(all_GSVM_STD(mask));
+%     stds(t,2)  = std(all_GSVM_STD(mask));
+% 
+%     means(t,3) = mean(all_AVG_ANGLE(mask));
+%     stds(t,3)  = std(all_AVG_ANGLE(mask));
+% 
+%     means(t,4) = mean(all_MAX_ASVM(mask));
+%     stds(t,4)  = std(all_MAX_ASVM(mask));
+% 
+%     means(t,5) = mean(all_MIN_ASVM(mask));
+%     stds(t,5)  = std(all_MIN_ASVM(mask));
+% 
+%     means(t,6) = mean(all_POST_ASVM(mask));
+%     stds(t,6)  = std(all_POST_ASVM(mask));
+% 
+%     means(t,7) = mean(all_INIT_ANGLE(mask));
+%     stds(t,7)  = std(all_INIT_ANGLE(mask));
+% end
+% 
+% %% Plot each stat in its own subplot (3x2)
+% figure;
+% 
+% for s = 1:6
+%     subplot(2,3,s);
+%     hold on;
+% 
+%     if s == 3
+%         % Angle subplot (subplot position 3)
+%         % 3 bars per tag: Init, Final, Diff
+%         angle_means = zeros(num_tags,3);  % columns: Init, Final, Diff
+%         angle_stds  = zeros(num_tags,3);
+% 
+%         for t = 1:num_tags
+%             tag = tags(t);
+%             mask = (group_labels == tag);
+%             if sum(mask) == 0
+%                 continue
+%             end
+%             avg_init_vals  = all_INIT_ANGLE(mask);
+%             avg_final_vals = all_AVG_ANGLE(mask);
+%             % diff_vals = abs(avg_final_vals) - abs(avg_init_vals);
+%             diff_vals = abs(avg_final_vals - avg_init_vals);
+% 
+%             angle_means(t,1) = mean(avg_init_vals);
+%             angle_means(t,2) = mean(avg_final_vals);
+%             angle_means(t,3) = mean(diff_vals);
+% 
+%             angle_stds(t,1) = std(avg_init_vals);
+%             angle_stds(t,2) = std(avg_final_vals);
+%             angle_stds(t,3) = std(diff_vals);
+%         end
+% 
+%         hb = bar(1:num_tags, angle_means);  % grouped bars
+%         % Get the X positions of each bar group for error bars
+%         x = nan(num_tags,3);
+%         for k = 1:3
+%             x(:,k) = hb(k).XEndPoints;
+%         end
+% 
+%         hold on
+%         errorbar(x, angle_means, angle_stds, 'k.', 'LineWidth', 1);
+% 
+%         yline(TILT_TRIGGER_ANGLE, 'r', 'LineWidth', 1);
+%         ylabel('Tilt Angle (deg)');
+%         title('Angles per tag');
+%         legend('INIT','FINAL','DIFF','Location','southeast');
+%         set(gca, 'XTick', 1:num_tags, 'XTickLabel', tags);
+%         grid on;
+%         hold off;
+% 
+%     else
+%         % Other stats: 1 bar per tag
+%         hb = bar(1:num_tags, means(:,s));
+%         errorbar(1:num_tags, means(:,s), stds(:,s), 'k.', 'LineWidth', 1);
+%         set(gca, 'XTick', 1:num_tags, 'XTickLabel', tags);
+%         ylabel(stats_names(s));
+%         title(stats_names(s) + " per tag");
+% 
+%         % optional thresholds
+%         switch stats_names(s)
+%             case "ASVM_STD"
+%                 yline(ACCEL_DEV_THRESHOLD, 'red', 'LineWidth', 1);
+%             case "GSVM_STD"
+%                 yline(GYRO_DEV_THRESHOLD, 'red', 'LineWidth', 1);
+%             case "MAX_ASVM"
+%                 yline(CHECK_TRIGGER, 'red', 'LineWidth', 1);
+%             case "MIN_ASVM"
+%                 yline(IDLE_TRIGGER, 'red', 'LineWidth', 1);
+%         end
+%         grid on;
+%     end
+% 
+%     hold off;
+% end
+% 
+% sgtitle('IMU Statistics per Event Tag');  % super title
 
 
 %% Graphing time Difference std to event
+figure;
+subplot(2,1,1)
 gscatter(all_FALL_DIFF_AVG, all_FALL_DIFF_STD, group_labels)
-all_FALL_DIFF_AVG;
-all_FALL_DIFF_STD;
+
+subplot(2,1,2)
+hold on
+plot(fall_sample)
+plot(filtered_fall);
+text(index+.02,peaks,num2str((1:numel(peaks))'))
+
+
