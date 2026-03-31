@@ -1,9 +1,9 @@
 clear; clc;
 
-tags = ["walk","limp"];
-%tags = ["limp"];
-folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "serial_data_test", "simp_fsm_test_iris"];
-%folders_to_search = ["simp_fsm_test_iris"];
+% tags = ["walk","limp"];
+tags = ["walk"];
+% folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "full_fsm_serial_test_1_lilly", "serial_data_test", "simp_fsm_test_iris"];
+folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated"];
 % Constants
 BUF_SIZE = 200;
 DEV_BUFFER_SIZE = 50;
@@ -57,6 +57,7 @@ all_FALL_TIMESTAMP = [];
 all_FALL_DIFF_AVG = [];
 all_FALL_DIFF_STD = [];
 all_REPORTED_EVENT = [];
+all_FALL_PEAKS = [];
 
 group_labels  = strings(0);
 
@@ -89,6 +90,7 @@ for t = 1:length(tags)
     fall_diff_std = nan(n,1);
     REPORTED_EVENT = strings(n,1);
     fall_time = nan(n,1);
+    fall_peaks = nan(n,1);
 
     for i = 1:n
         T0 = readtable(tag_files{i});
@@ -138,21 +140,28 @@ for t = 1:length(tags)
         fall_az = T0.AZ(fall_idx);
         
         fall_time = [];
-        filtered_fall = lowpass(fall_sample, 0.01);
+        filtered_fall = lowpass(fall_sample, 0.05);
         [peaks, index] = findpeaks(filtered_fall);
 
+        figure
+        plot(fall_sample);
+        hold on;
+        plot(filtered_fall);
+        title(tag_files{i});
+        text(index+.02,peaks,num2str((1:numel(peaks))'))
+        hold off;
         %this for loop only uses the odd peaks from the filtered data
         %(lowkey looks better... aound 3-4 peaks detected per file)
 
-        for t = 1:length(index)
-            if mod(t,2) == 1
-                disp(t)
-                fall_time = [fall_time; T0.MCU_TIME(index(t))];
-            end
-        end
+        % for t = 1:length(index)
+        %     if mod(t,2) == 1
+        %         disp(t)
+        %         fall_time = [fall_time; T0.MCU_TIME(index(t))];
+        %     end
+        % end
         
         %this one uses every peak (generally around 7)
-        % fall_time = T0.timestamp(index);
+        fall_time = T0.timestamp(index);
  
             
         
@@ -225,6 +234,7 @@ for t = 1:length(tags)
     all_REPORTED_EVENT = [all_REPORTED_EVENT; REPORTED_EVENT(valid)];
     all_FALL_DIFF_AVG = [all_FALL_DIFF_AVG; fall_diff_avg(valid)];
     all_FALL_DIFF_STD = [all_FALL_DIFF_STD; fall_diff_std(valid)];
+    all
   
 
     % Add labels for these samples

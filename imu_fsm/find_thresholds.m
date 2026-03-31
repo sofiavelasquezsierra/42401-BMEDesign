@@ -70,7 +70,7 @@ all_AVG_ANGLE = [];
 all_INIT_ANGLE = [];
 all_MAX_ASVM  = [];
 all_MIN_ASVM  = [];
-all_POST_ASVM = [];
+all_AVG_ASVM = [];
 all_REPORTED_EVENT = [];
 
 group_labels  = strings(0);
@@ -97,7 +97,7 @@ for t = 1:length(tags)
     INIT_ANGLE = nan(n,1);
     MAX_ASVM   = nan(n,1);
     MIN_ASVM   = nan(n,1);
-    POST_ASVM  = nan(n,1);
+    AVG_ASVM  = nan(n,1);
     REPORTED_EVENT = strings(n,1);
 
     for i = 1:n
@@ -186,17 +186,20 @@ for t = 1:length(tags)
         MAX_ASVM(i) = max(fall_sample);
         MIN_ASVM(i) = min(fall_sample);
 
+        % Ratio of values above / below 1
+        AVG_ASVM(i) = length(find(fall_sample > 1)) / length(find(fall_sample < 1));
+
         % post-event ASVM
-        post_start = check_trigger + BUF_SIZE;
-
-        if post_start < height(T0)
-
-            post_end = min(post_start + BUF_SIZE, height(T0));
-
-            POST_ASVM(i) = mean(T0.ASVM(post_start:post_end));
-
-        end
-
+    %     post_start = check_trigger + BUF_SIZE;
+    % 
+    %     if post_start < height(T0)
+    % 
+    %         post_end = min(post_start + BUF_SIZE, height(T0));
+    % 
+    %         AVG_ASVM(i) = mean(T0.ASVM(post_start:post_end));
+    % 
+    %     end
+    % 
     end
 
     % Remove NaNs from failed detections
@@ -209,7 +212,7 @@ for t = 1:length(tags)
     all_INIT_ANGLE = [all_INIT_ANGLE; INIT_ANGLE(valid)];
     all_MAX_ASVM  = [all_MAX_ASVM;  MAX_ASVM(valid)];
     all_MIN_ASVM  = [all_MIN_ASVM;  MIN_ASVM(valid)];
-    all_POST_ASVM = [all_POST_ASVM; POST_ASVM(valid)];
+    all_AVG_ASVM = [all_AVG_ASVM; AVG_ASVM(valid)];
     all_REPORTED_EVENT = [all_REPORTED_EVENT; REPORTED_EVENT(valid)];
     event_file_paths = [event_file_paths; tag_files(valid)'];
     
@@ -222,7 +225,7 @@ for t = 1:length(tags)
     results.(tag).MAX_ASVM  = mean(MAX_ASVM(valid));
     results.(tag).INIT_ANGLE = mean(INIT_ANGLE(valid));
     results.(tag).MIN_ASVM  = mean(MIN_ASVM(valid));
-    results.(tag).POST_ASVM = mean(POST_ASVM(valid));
+    results.(tag).AVG_ASVM = mean(AVG_ASVM(valid));
     results.(tag).N = sum(valid);
 
 end
@@ -252,14 +255,14 @@ title("Impact Magnitude and Stabilize ASVM STD")
 legend('NumColumns', 2);
 
 subplot(2,2,4)
-gscatter(all_POST_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
-xlabel("Post ASVM")
+gscatter(all_AVG_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), group_labels)
+xlabel("AVG ASVM")
 ylabel("Angle Diff")
-title("Angle Delta vs ASVM post impact")
+title("Angle Delta vs avg ASVM")
 legend('NumColumns', 2);
 
 %% Plot grouped bar chart with error bars
-stats_names = ["ASVM_STD","GSVM_STD","AVG_ANGLE","MAX_ASVM","MIN_ASVM","POST_ASVM"];
+stats_names = ["ASVM_STD","GSVM_STD","AVG_ANGLE","MAX_ASVM","MIN_ASVM","AVG_ASVM"];
 num_stats = length(stats_names);
 num_tags  = length(tags);
 
@@ -288,8 +291,8 @@ for t = 1:num_tags
     means(t,5) = mean(all_MIN_ASVM(mask));
     stds(t,5)  = std(all_MIN_ASVM(mask));
     
-    means(t,6) = mean(all_POST_ASVM(mask));
-    stds(t,6)  = std(all_POST_ASVM(mask));
+    means(t,6) = mean(all_AVG_ASVM(mask));
+    stds(t,6)  = std(all_AVG_ASVM(mask));
 
     means(t,7) = mean(all_INIT_ANGLE(mask));
     stds(t,7)  = std(all_INIT_ANGLE(mask));
