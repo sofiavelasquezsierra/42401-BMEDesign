@@ -1,7 +1,7 @@
 % Test code for checking out the collected data
 set(groot, 'defaultTextInterpreter', 'None');
 
-file_name = './simp_fsm_test_iris/limp_left_injured_1.csv';
+file_name = './simp_fsm_test_iris/walking_2.csv';
 T0 = readtable(file_name);
 dataCols = T0.Properties.VariableNames( ...
     varfun(@isnumeric, T0, 'OutputFormat','uniform') ...
@@ -80,6 +80,9 @@ xline(time_sample(check_trigger_idx))
 xline(time_sample(INIT_TILT_SIZE))
 xline(time_sample(end - FINAL_TILT_SIZE))
 xline(time_sample(end - DEV_BUFFER_SIZE))
+yline(1.1)
+yline(0.9)
+yline(mean(fall_sample))
 title("Sample buffer being processed")
 subtitle("accel dev: " + std(fall_sample(end - DEV_BUFFER_SIZE : end)))
 
@@ -96,6 +99,8 @@ hold off;
 subplot(3,1,3)
 hold on;
 plot(time0, T0.ASVM)
+yline(1)
+yline(mean(T0.ASVM))
 xline(time0(check_trigger))
 xline(time0(idle_trigger)) 
 xline(time0(end_idx))
@@ -139,4 +144,5 @@ plot(time0, T0.AY)
 plot(time0, T0.AZ)
 legend("ASVM", "AX", "AY", "AZ", 'location', 'southeast')
 title("ASVM data")
+yline(1)
 

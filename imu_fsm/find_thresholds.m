@@ -14,7 +14,8 @@ tags = ["fall","run","walk","limp","jump","sit","squat"];
 % folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated", "separated_csv_files/fsm_test_shanaya_separated"];
 
 % all serially sampled data, separated into event windows - for determining event thresholds
-folders_to_search = ["separated_csv_files/fsm_test_shanaya_separated", "separated_csv_files/full_fsm_serial_100Hz_1_lilly_separated", "separated_csv_files/simp_fsm_test_iris_separated", "full_fsm_serial_test_1_lilly", "serial_data_test"];
+% folders_to_search = ["separated_csv_files/fsm_test_shanaya_separated", "separated_csv_files/full_fsm_serial_100Hz_1_lilly_separated", "separated_csv_files/simp_fsm_test_iris_separated", "full_fsm_serial_test_1_lilly", "serial_data_test"];
+folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated"];
 
 no_event_cnt = 0;
 event_file_paths = [];
@@ -186,9 +187,17 @@ for t = 1:length(tags)
         MAX_ASVM(i) = max(fall_sample);
         MIN_ASVM(i) = min(fall_sample);
 
-        % Ratio of values above / below 1
-        AVG_ASVM(i) = length(find(fall_sample > 1)) / length(find(fall_sample < 1));
+        % Ratio of values above : below 1-ish
+        % AVG_ASVM(i) = length(find(fall_sample > 1)) / length(find(fall_sample < 1));
+        % AVG_ASVM(i) = length(find(fall_sample > 1.1)) / length(find(fall_sample < 0.9));
+ 
+        midpoint = median(fall_sample);
+        above_dev = mean(fall_sample(fall_sample > midpoint) - midpoint);
+        below_dev = mean(midpoint - fall_sample(fall_sample < midpoint));
+        AVG_ASVM(i) = above_dev / below_dev;
+        
 
+        disp(AVG_ASVM(i))
         % post-event ASVM
     %     post_start = check_trigger + BUF_SIZE;
     % 

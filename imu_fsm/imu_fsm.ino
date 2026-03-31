@@ -37,6 +37,8 @@ const bool USE_BLE = false;
 
 #define STATIONARY_THRESHOLD 0.15
 
+#define LIMP_SKEWNESS_THRESHOLD 1.5
+
 
 // Note: the AY value is actually the "AZ" due to the orientation of the device lol
 
@@ -101,10 +103,11 @@ enum FALL_STATES {
     STATIONARY_POST_FALL = 4,
     WALKING = 5,
     RUNNING = 6,
-    JUMPING_OR_QUICK_SIT = 7
+    JUMPING_OR_QUICK_SIT = 7,
+    LIMPING = 8
 } fall_state;
 
-String fall_state_strings[9] = {"IDLE_FALL", "CHECK_FALL", "ANALYZE_IMPACT", "DETECTED_FALL", "STATIONARY_POST_FALL", "WALKING", "RUNNING", "JUMPING_OR_QUICK_SIT"};
+String fall_state_strings[9] = {"IDLE_FALL", "CHECK_FALL", "ANALYZE_IMPACT", "DETECTED_FALL", "STATIONARY_POST_FALL", "WALKING", "RUNNING", "JUMPING_OR_QUICK_SIT", "LIMPING"};
 
 enum IMU_COMP {
     ACCEL = 0,
@@ -387,6 +390,64 @@ int calculate_event() {
     return next_state;
 }
 
+float calculate_median(float* arr, int n) {
+    // copy so we don't mutate the original buffer
+    float temp[n];
+    memcpy(temp, arr, n * sizeof(float));
+
+    // insertion sort - efficient for small n (your BUF_SIZE ~50-200)
+    for (int i = 1; i < n; i++) {
+        float key = temp[i];
+        int j = i - 1;
+        while (j >= 0 && temp[j] > key) {
+            temp[j + 1] = temp[j];
+            j--;
+        }
+        temp[j + 1] = key;
+    }
+
+    if (n % 2 == 0)
+        return (temp[n/2 - 1] + temp[n/2]) / 2.0f;
+    else
+        return temp[n/2];
+}
+
+// Naive algorithm, optimize later
+float calculate_skewness() {
+    float above_dev = 0;
+    float below_dev = 0;
+
+    int num_above = 0;
+    int num_below = 0;
+
+    // calculate median
+    float midpoint = calculate_median(asvm_buf, BUF_SIZE);
+
+    // calculate means above/below midpoint value
+    for(int i = 0; i < BUF_SIZE; i++) {
+        if(asvm_buf[i] > midpoint) {
+            above_dev += (asvm_buf[i] - midpoint);
+            num_above ++;
+        }
+
+        else if(asvm_buf[i] < midpoint) {
+            below_dev += (midpoint - asvm_buf[i]);
+            num_below ++;
+        }
+    }
+
+    if(num_above == 0 || num_below == 0) {
+        return 1.0;
+    }
+
+    else {
+        above_dev = above_dev / num_above;
+        below_dev = below_dev / num_below;
+
+        return (above_dev / below_dev);
+    }
+}
+
 
 void setup() {
     Serial.begin(115200);
@@ -451,7 +512,8 @@ void loop() {
                             (std_accel <= ACCEL_DEV_RUNNING);
         bool running_dev =  (std_accel >= ACCEL_DEV_RUNNING);
         bool running_accel = (cv.fall_impact >= ASVM_RUN_WALK_THRESHOLD);
-        
+        bool limp = calculate_skewness() >= LIMP_SKEWNESS_THRESHOLD;
+
         // Fall
         if(stabilized_dev && fall_tilt_check) {
             fall_state = DETECTED_FALL;
@@ -462,7 +524,14 @@ void loop() {
         }
         // Walk
         else if(walking_dev && !fall_tilt_check && !running_accel) {
-            fall_state = WALKING;
+            // Walk and limp
+            if(limp) {
+                fall_state = LIMPING;
+            }
+            // Normal walk
+            else {
+                fall_state = WALKING;
+            }
         }
         // Jump or sit
         else if(stabilized_dev && !fall_tilt_check) {
