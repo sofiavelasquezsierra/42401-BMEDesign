@@ -13,7 +13,7 @@ const bool USE_BLE = false;
 // macros
 
 // should run at 100Hz
-#define LOOP_DELAY 10 
+#define LOOP_DELAY 7
 
 // These values are inspired by the paper
 #define BUF_SIZE 200
@@ -384,11 +384,11 @@ bool check_stationary() {
 // calculate event score based on closeness to each event's thresholds, lowest
 // score "wins" and is the classified event
 // if all scores are too high then go to IDLE
-int calculate_event() {
-    next_state = IDLE_FALL; // default
+// int calculate_event() {
+//     next_state = IDLE_FALL; // default
     
-    return next_state;
-}
+//     return next_state;
+// }
 
 float calculate_median(float* arr, int n) {
     // copy so we don't mutate the original buffer
