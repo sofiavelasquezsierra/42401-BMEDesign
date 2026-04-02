@@ -11,11 +11,11 @@ tags = ["fall","run","walk","limp","jump","sit","squat"];
 % folders_to_search = ["fsm_test_shanaya", "full_fsm_serial_100Hz_1_lilly", "simp_fsm_test_iris"];
 
 % data with most-ish updated thresholds being used - for perf checking
-% folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated", "separated_csv_files/fsm_test_shanaya_separated"];
-
+% folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated", "separated_csv_files/fsm_test_shanaya_separated", "harry_full_fsm"];
+folders_to_search = ["separated_csv_files/harry_full_fsm_separated"];
 % all serially sampled data, separated into event windows - for determining event thresholds
 % folders_to_search = ["separated_csv_files/fsm_test_shanaya_separated", "separated_csv_files/full_fsm_serial_100Hz_1_lilly_separated", "separated_csv_files/simp_fsm_test_iris_separated", "full_fsm_serial_test_1_lilly", "serial_data_test"];
-folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated"];
+% folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated"];
 
 no_event_cnt = 0;
 event_file_paths = [];

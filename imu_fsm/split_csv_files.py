@@ -95,9 +95,7 @@ def process_folders(input_folders: List[str], output_root="separated_csv_files")
 # --- Entry point ---
 if __name__ == "__main__":
     input_folders = [
-        "full_fsm_serial_100Hz_1_lilly",
-        "fsm_test_shanaya",
-        "simp_fsm_test_iris"
+        "harry_full_fsm"
     ]
 
     process_folders(input_folders)
