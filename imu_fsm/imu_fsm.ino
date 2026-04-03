@@ -89,10 +89,11 @@ struct curr_vals_struct {
     uint32_t curr_time;
     uint32_t delta_time;
     float fall_impact;
+    float min_asvm;
     float fall_event_val;
 };
 
-curr_vals_struct cv = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false};
+curr_vals_struct cv = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false};
 
 // motion classifer states, sorry for the bad naming
 enum FALL_STATES {
@@ -257,6 +258,7 @@ bool check_fall() {
     check_pos = 0;
     max_pos = 0;
     float max_accel = 0;
+    float min_accel = 999.0f;
     for(int i = 0; i < BUF_SIZE; i++) {
         // update_values(1);
         send_values();
@@ -271,10 +273,15 @@ bool check_fall() {
             max_accel = cv.A_SVM;
             max_pos = i; // also save index of max accel value
         }
+
+        if(cv.A_SVM <= min_accel) {
+            min_accel = cv.A_SVM;
+        }
         delay(LOOP_DELAY); // delay since collecting samples
     }
 
     cv.fall_impact = max_accel;
+    cv.min_asvm = min_accel;
     return large_accel;
 }
 
@@ -507,7 +514,7 @@ void loop() {
         float std_gyro = std_dev_check(GYRO, BUF_SIZE);
         bool fall_tilt_check = posture_check();
         bool stabilized_dev =   (std_accel <= ACCEL_DEV_THRESHOLD) &&
-                                (std_accel <= GYRO_DEV_THRESHOLD);
+                                (std_gyro <= GYRO_DEV_THRESHOLD);
         bool walking_dev =  (std_accel >= ACCEL_DEV_WALKING) &&
                             (std_accel <= ACCEL_DEV_RUNNING);
         bool running_dev =  (std_accel >= ACCEL_DEV_RUNNING);
