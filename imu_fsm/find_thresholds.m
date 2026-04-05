@@ -16,7 +16,7 @@ all_idx_sizes = [];
 % folders_to_search = ["separated_csv_files/harry_full_fsm_separated"];
 % all serially sampled data, separated into event windows - for determining event thresholds
 % folders_to_search = ["separated_csv_files/harry_full_fsm_separated", "separated_csv_files/fsm_test_shanaya_separated", "separated_csv_files/full_fsm_serial_100Hz_1_lilly_separated", "separated_csv_files/simp_fsm_test_iris_separated", "full_fsm_serial_test_1_lilly", "serial_data_test"];
-% folders_to_search = ["separated_csv_files/simp_fsm_test_iris_separated"];
+% folders_to_search = ["separated_csv_files/harry_full_fsm_separated"];
 folders_to_search = ["separated_csv_files/harry_full_fsm_separated", "separated_csv_files/fsm_test_shanaya_separated", "separated_csv_files/full_fsm_serial_100Hz_1_lilly_separated", "separated_csv_files/simp_fsm_test_iris_separated"];
 
 no_event_cnt = 0;
@@ -458,6 +458,28 @@ sig_tags = ["fall", "run", "walk", "limp", "jump"];
 signatures = compute_signatures(norm_group_labels, all_ASVM_STD, all_GSVM_STD, ...
     all_MAX_ASVM, all_MIN_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), ...
     all_SKEWNESS, N_STD, feature_weights);
+
+%% Display signature ranges as a table for porting to microcontroller
+fprintf("\n========== SIGNATURE RANGES (N_STD = %.1f) ==========\n", N_STD);
+
+fields = {'ASVM_STD', 'GSVM_STD', 'MAX_ASVM', 'MIN_ASVM', 'TILT_DIFF', 'SKEWNESS'};
+priority = ["fall", "run", "limp", "walk", "jump"];
+
+for p = 1:length(priority)
+    tag = priority(p);
+    if ~isfield(signatures, tag)
+        continue
+    end
+    fprintf("\n--- %s ---\n", upper(tag));
+    fprintf("  %-12s %8s %8s %8s\n", "FEATURE", "LO", "MEAN", "HI");
+    for f = 1:length(fields)
+        feat = fields{f};
+        sig = signatures.(tag).(feat);
+        fprintf("  %-12s %8.4f %8.4f %8.4f\n", feat, sig.lo, sig.mean, sig.hi);
+    end
+end
+
+fprintf("\n=====================================================\n");
 
 % Run classifier
 N_total = length(group_labels);
