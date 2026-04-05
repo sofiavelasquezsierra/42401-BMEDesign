@@ -440,8 +440,8 @@ EVENT_CLASSIFICATION_SUMMARY = [all_REPORTED_EVENT group_labels event_file_paths
 
 %% Classifier simulation and threshold sweep - V2
 
-N_STD = 1.33;  % tune this
-MIN_SCORE = 4; 
+N_STD = 1.358; % 1.33;  % tune this
+MIN_SCORE = 3; % 4; 
 % instead of one N_STD, define per-feature multipliers
 feature_weights.ASVM_STD  = 1.0;
 feature_weights.GSVM_STD  = 1.0;
@@ -450,20 +450,16 @@ feature_weights.MIN_ASVM  = 0.75;  % tighter - good separator
 feature_weights.TILT_DIFF = 0.75;  % tighter for fall detection
 feature_weights.SKEWNESS  = 1.5;   % looser - high variance
 
-% normalize sit/squat -> jump before computing signatures
-norm_group_labels = group_labels;
-norm_group_labels(norm_group_labels == "sit")   = "jump";
-norm_group_labels(norm_group_labels == "squat") = "jump";
-sig_tags = ["fall", "run", "walk", "limp", "jump"];
-signatures = compute_signatures(norm_group_labels, all_ASVM_STD, all_GSVM_STD, ...
+sig_tags = ["fall", "run", "walk", "limp", "jump", "sit", "squat"];
+signatures = compute_signatures(group_labels, all_ASVM_STD, all_GSVM_STD, ...
     all_MAX_ASVM, all_MIN_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), ...
     all_SKEWNESS, N_STD, feature_weights);
 
 %% Display signature ranges as a table for porting to microcontroller
-fprintf("\n========== SIGNATURE RANGES (N_STD = %.1f) ==========\n", N_STD);
+fprintf("\n========== SIGNATURE RANGES (N_STD = %.3f) ==========\n", N_STD);
 
 fields = {'ASVM_STD', 'GSVM_STD', 'MAX_ASVM', 'MIN_ASVM', 'TILT_DIFF', 'SKEWNESS'};
-priority = ["fall", "run", "limp", "walk", "jump"];
+priority = ["fall", "limp", "run", "walk", "jump", "sit", "squat"];
 
 for p = 1:length(priority)
     tag = priority(p);
@@ -494,8 +490,6 @@ for j = 1:N_total
 end
 
 norm_labels = group_labels;
-norm_labels(norm_labels == "sit")   = "jump";
-norm_labels(norm_labels == "squat") = "jump";
 
 correct = strcmpi(predictions, norm_labels);
 fprintf("Baseline accuracy: %.1f%%\n", 100 * mean(correct));
@@ -514,13 +508,13 @@ figure;
 confusionchart(norm_labels, predictions);
 title("Signature classifier confusion matrix");
 %% N_STD sweep
-MIN_SCORE = 4;  % tune this alongside N_STD
+MIN_SCORE = 3;  % tune this alongside N_STD
 N_STD_range = linspace(0.5, 3.0, 100);
 sweep_acc   = zeros(size(N_STD_range));
 sweep_fall_acc = zeros(size(N_STD_range));
 
 for s = 1:length(N_STD_range)
-    sigs_sweep = compute_signatures(norm_group_labels, all_ASVM_STD, all_GSVM_STD, ...
+    sigs_sweep = compute_signatures(group_labels, all_ASVM_STD, all_GSVM_STD, ...
         all_MAX_ASVM, all_MIN_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), ...
         all_SKEWNESS, N_STD_range(s));
 
@@ -538,7 +532,6 @@ for s = 1:length(N_STD_range)
 
 end
 
-%% N_STD and MIN_SCORE sweep
 figure;
 hold on;
 plot(N_STD_range, sweep_acc * 100, 'b', 'DisplayName', 'Overall');
@@ -551,13 +544,15 @@ legend('Location', 'best');
 grid on;
 hold off;
 
+%% N_STD and MIN_SCORE sweep
+
 figure;
 hold on;
 colors = lines(6);
 for m = 1:6
     sweep_acc_m = zeros(size(N_STD_range));
     for s = 1:length(N_STD_range)
-        sigs_sweep = compute_signatures(norm_group_labels, all_ASVM_STD, all_GSVM_STD, ...
+        sigs_sweep = compute_signatures(group_labels, all_ASVM_STD, all_GSVM_STD, ...
             all_MAX_ASVM, all_MIN_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), ...
             all_SKEWNESS, N_STD_range(s));
 
@@ -588,7 +583,7 @@ N_STD_range = linspace(0.5, 3.0, 100);
 sweep_acc   = zeros(size(N_STD_range));
 
 for s = 1:length(N_STD_range)
-    sigs_sweep = compute_signatures(norm_group_labels, all_ASVM_STD, all_GSVM_STD, ...
+    sigs_sweep = compute_signatures(group_labels, all_ASVM_STD, all_GSVM_STD, ...
         all_MAX_ASVM, all_MIN_ASVM, abs(all_AVG_ANGLE - all_INIT_ANGLE), ...
         all_SKEWNESS, N_STD_range(s), feature_weights);
 
@@ -611,7 +606,7 @@ ylabel('Accuracy (%)');
 title('Accuracy vs signature width');
 
 % add after computing predictions, before confusion matrix
-fall_mask = norm_group_labels == "fall";
+fall_mask = group_labels == "fall";
 fall_indices = find(fall_mask);
 
 fprintf("\nFall misclassification breakdown:\n");
@@ -662,8 +657,6 @@ end
 
 
 norm_labels = group_labels;
-norm_labels(norm_labels == "sit")   = "jump";
-norm_labels(norm_labels == "squat") = "jump";
 
 correct = strcmpi(predictions, norm_labels);
 fprintf("Baseline accuracy: %.1f%%\n", 100 * mean(correct));
@@ -749,7 +742,7 @@ end
 function signatures = compute_signatures(group_labels, asvm_std, gsvm_std, ...
     max_asvm, min_asvm, tilt_diff, skewness, N_STD, feature_weights)
 
-    sig_tags = ["fall", "run", "walk", "limp", "jump"];
+    sig_tags = ["fall", "run", "walk", "limp", "jump", "sit", "squat"];
     signatures = struct();
 
     fields = {'ASVM_STD', 'GSVM_STD', 'MAX_ASVM', 'MIN_ASVM', 'TILT_DIFF', 'SKEWNESS'};
@@ -783,7 +776,7 @@ function predicted = classify_event_signature(std_accel, std_gyro, tilt_diff, ..
         val >= sig.(field).lo && val <= sig.(field).hi;
 
     % priority order - fall first since it's safety critical
-    priority = ["fall", "limp", "run", "walk", "jump"];
+    priority = ["fall", "limp", "run", "walk", "jump", "sit", "squat"];
     predicted = "idle";
 
     for p = 1:length(priority)
@@ -812,7 +805,7 @@ function predicted = classify_event_signature_scores(std_accel, std_gyro, tilt_d
     in_range = @(val, sig, field) ...
         val >= sig.(field).lo && val <= sig.(field).hi;
 
-    priority = ["fall", "run", "limp", "walk", "jump"];
+    priority = ["fall", "limp", "run", "walk", "jump", "sit", "squat"];
     predicted = "idle";
     best_score = 0;
 
